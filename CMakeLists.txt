@@ -21,10 +21,10 @@ find_package(catkin REQUIRED COMPONENTS
     tf2_ros
 )
 
-find_package(OpenCV REQUIRED #COMPONENTS
-        #imgproc
-        #highgui
-        )
+# find_package(OpenCV REQUIRED #COMPONENTS
+#         #imgproc
+#         #highgui
+#         )
 
 ## Includes headers in include folder
 catkin_package(
@@ -39,7 +39,7 @@ catkin_package(
 ## Includes headers in include folder
 include_directories( include
     ${catkin_INCLUDE_DIRS}
-    ${OpenCV_INCLUDE_DIRS}
+#     ${OpenCV_INCLUDE_DIRS}
         )
 
 # file(GLOB SOURCES "src/*.cpp")
@@ -68,7 +68,7 @@ add_dependencies(pose_extraction_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catk
 
 target_link_libraries(pose_extraction_node
         ${catkin_LIBRARIES}
-        ${OpenCV_LIBRARIES}
-        ${OpenCV_LIBS}
+#	${OpenCV_LIBRARIES}
+#       ${OpenCV_LIBS}
         )
 
