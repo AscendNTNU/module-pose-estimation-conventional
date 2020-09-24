@@ -3,13 +3,15 @@
 	      <param name="depth_mean_offset_value" value="-2" />
 	      <param name="mask_dilation_kernel_size" value="3" />
 	      <param name="depth_dilation_kernel_size" value="3" />
+
 	      <param name="itopic_image" value="/d435i/color/image_rect_color" />
           <param name="itopic_depth_image" value="/d435i/depth_registered/sw_registered/image_rect_raw" />
-	      <param name="itopic_bounding_box" value="unused" />
-	      <param name="itopic_model_tf_frame_id" value="unused" />
-	      <param name="otopic_extracted_tf_frame_id" value="unused" />
+	      <param name="itopic_depth_camera_info" value="/d435i/depth/camera_info" />
+		  <param name="world_tf_frame_id" value="t265_odom_frame" />
+
+	      <param name="otopic_PoseWithCovarianceStamped" value="/perception/modulePoseWithCovariance" />
 	</node>
 
-    <node pkg="rosbag" type="play" name="player" args="--clock $(find module-pose-estimation-conventional)/bags/skaft_inne_tak.bag"/>
+    <node pkg="rosbag" type="play" name="player" args="-l --clock $(find module-pose-estimation-conventional)/bags/skaft_inne_tak.bag"/>
 
 </launch>
