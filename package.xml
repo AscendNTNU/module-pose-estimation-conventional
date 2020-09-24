@@ -61,6 +61,13 @@
   <build_depend>tf2_ros</build_depend>
   <build_depend>ascend_msgs</build_depend>
 
+  <exec_depend>ascend_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
