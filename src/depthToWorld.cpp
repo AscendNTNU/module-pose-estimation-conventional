@@ -43,7 +43,7 @@ cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const 
     float depth{static_cast<float>(center.z + (point.x - center.x) * slope_x + (point.y - center.y) * slope_y)};
 
     /// Return the point as an (x, y, z) point
-    return cv::Point3f{(point.x - cx) * depth / fx, (point.y - cy) * depth / fy, depth};
+    return cv::Point3f{static_cast<float>((point.x - cx) * depth / fx), static_cast<float>((point.y - cy) * depth / fy), depth};
 
 
 /*
