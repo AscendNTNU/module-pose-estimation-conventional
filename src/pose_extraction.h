@@ -118,7 +118,7 @@ private:
 
 public:
     // TODO: Make all debug statements check with this debug code (0 meaning no debug)
-    int debug{1};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps
+    int debug{0};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps
 
     Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it);
     ~Pose_extraction();
