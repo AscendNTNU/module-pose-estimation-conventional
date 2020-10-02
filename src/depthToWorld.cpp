@@ -26,7 +26,7 @@ findXYZ(const std::vector<cv::Point2f> &corner_points, const cv::Mat &depth_imag
     return returned_points;
 }
 
-cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K_arr, int debug) {
+cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K_arr) {
     const auto& cx = depth_camera_info_K_arr.at(2);
     const auto& cy = depth_camera_info_K_arr.at(5);
     const auto& fx = depth_camera_info_K_arr.at(0);
@@ -37,7 +37,7 @@ cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const 
     // Find the center of these points and the gradient of the fitted plane
     // TODO: Could add a check that no valid close points are at distance greater than set distance threshold in imageCb
     cv::Point3f center; double slope_x, slope_y;
-    std::tie(center, slope_x, slope_y) = getPlaneFit(valid_close_points, debug);
+    std::tie(center, slope_x, slope_y) = getPlaneFit(valid_close_points);
 
     /// The following is the interpolated depth: center.depth + delta_x * (d_depth / d_x) + delta_y * (d_depth / d_y)
     float depth{static_cast<float>(center.z + (point.x - center.x) * slope_x + (point.y - center.y) * slope_y)};
@@ -272,7 +272,7 @@ int worstFitPointIndex(const std::vector<cv::Point3f> &points, float thresh_fact
 
 bool getCameraPoseWithCov(const cv::Mat &depth_image, const std::vector<cv::Point2f> &corner_points,
                           const std::vector<double> &depth_camera_info_K_arr, const std::vector<double> &depth_camera_info_D,
-                          geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped) {
+                          geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped, int debug) {
 
     std::vector<cv::Point2f> inner_corner_points{getScaledTowardsCenter(corner_points, 0.2)};  // Tweak scaling
     std::vector<cv::Point3f> depth_corner_points = findXYZ(inner_corner_points, depth_image, depth_camera_info_K_arr);

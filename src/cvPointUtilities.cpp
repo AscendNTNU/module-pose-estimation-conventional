@@ -173,7 +173,7 @@ std::tuple<cv::Point3f, double, double> getPlaneFit(std::vector<cv::Point3f> dep
     double b{(S_xz * S_xy - S_yz * S_xx) / D};
 
     if (D==0) {
-        if (debug >= 0)
+        if (debug > 0)
             printf("Points are on a line in getPlaneFit, D is 0.\n");
         a = b = 0;
     }

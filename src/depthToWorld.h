@@ -25,7 +25,7 @@ struct Gridpoint {
 void printRot(const tf2::Quaternion& test_rotation);
 
 std::vector<cv::Point3f>
-findXYZ(const std::vector<cv::Point2f> &corner_points, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K, int debug=0);
+findXYZ(const std::vector<cv::Point2f> &corner_points, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K);
 
 cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K);
 
@@ -70,7 +70,7 @@ int worstFitPointIndex(const std::vector<cv::Point3f>& points, float thresh_fact
 
 bool getCameraPoseWithCov(const cv::Mat &depth_image, const std::vector<cv::Point2f> &corner_points,
                           const std::vector<double> &depth_camera_info_K, const std::vector<double> &depth_camera_info_D,
-                          geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped);
+                          geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped, int debug);
 
 
 #endif //MODULE_POSE_ESTIMATION_DEPTHTOWORLD_H
