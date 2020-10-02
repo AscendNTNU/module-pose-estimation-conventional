@@ -586,7 +586,7 @@ void greyFromImgConversion(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, IMG_C
 
     /// And blur afterwards
     if (blur)
-        GaussianBlur(im_grey_out, im_grey_out, cv::Size(17, 17), 3, 3);
+        cv::GaussianBlur(im_grey_out, im_grey_out, cv::Size(17, 17), 3, 3);
 }
 
 void greyFromImgConversion(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, IMG_CONVERSION conversion_type, const bool &blur)
