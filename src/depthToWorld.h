@@ -25,7 +25,7 @@ struct Gridpoint {
 void printRot(const tf2::Quaternion& test_rotation);
 
 std::vector<cv::Point3f>
-findXYZ(const std::vector<cv::Point2f> &corner_points, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K);
+findXYZ(const std::vector<cv::Point2f> &corner_points, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K, int debug=0);
 
 cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const std::vector<double> &depth_camera_info_K);
 

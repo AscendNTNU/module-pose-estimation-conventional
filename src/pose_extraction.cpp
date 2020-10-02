@@ -6,7 +6,7 @@
 
 Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it) : nh_(nh), it_(it), BlueSquareScoreCalculator{}
 {
-    if (debug) {
+    if (debug > 0) {
         // Initialize openCV window
         cv::namedWindow(INPUT_WINDOW);
         moveWindow(INPUT_WINDOW, 10, 10);
@@ -21,7 +21,7 @@ Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTran
 
 Pose_extraction::~Pose_extraction()
 {
-    if (debug) {
+    if (debug > 0) {
         cv::destroyAllWindows();
     }
 }
@@ -68,7 +68,7 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
         geometry_msgs::PoseWithCovarianceStamped pose_with_cov_stamped;  ///< Object for publishing
         getCameraPoseWithCov(cv_ptr_depth->image, corner_points,
                              this->depth_camera_info_K_arr, this->depth_camera_info_D,
-                             pose_with_cov_stamped);
+                             pose_with_cov_stamped, debug);
 
         if (transform_to_world(header_in, pose_with_cov_stamped)) {
             this->pose_publisher.publish(pose_with_cov_stamped);
@@ -76,7 +76,7 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
 
     }
 
-    if (debug) {
+    if (debug > 0) {
         if (debug % 2) {
             // Timer endpoint and print
             auto stop = boost::chrono::high_resolution_clock::now();
@@ -284,7 +284,7 @@ bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat
     if (intersections.empty())
         return false;
 
-    /// Do clustering of the points, and draw the cluster. Seems unnecessairy when using convex hull,
+    /// Do clustering of the points, and draw the cluster. Seems unnecessary when using convex hull,
     /// but might be relevant later. Is prone to errors anyway.
     /*
     {
@@ -301,7 +301,7 @@ bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat
         /// Draw the convex hull of the cluster averages in orange
         if (!cluster_averages.empty()) {
             /// Find convex hull of points
-            std::cout << "Clusters: " << cluster_averages.size() << "\n";
+            // std::cout << "Clusters: " << cluster_averages.size() << "\n";
             std::vector<cv::Point2i> hull;
             cv::convexHull(cluster_averages, hull);
 
@@ -369,12 +369,14 @@ bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat
 
     if (hull_approx.size() > 4)
     {
-        std::printf("Found more than 4 points: %d \n", (int)hull_approx.size());
+        if (debug >= 0)
+            std::printf("Found more than 4 points: %d \n", (int)hull_approx.size());
         return false;
     }
     else if (hull_approx.size() > 4)
     {
-        std::printf("Found less than 4 points: %d \n", (int)hull_approx.size());
+        if (debug >= 0)
+            std::printf("Found less than 4 points: %d \n", (int)hull_approx.size());
         return false;
     }
     else
@@ -436,7 +438,7 @@ double Pose_extraction::cornerPointScore(cv::Mat &image_in, cv::Mat &blueness_im
     double res;
     res = BlueSquareScoreCalculator.getBlueSquareScore(image_in, dst_quad);
 
-    if (debug) {
+    if (debug > 0) {
         std::cout << "BSS result: " << res << "\n";
         if (debug % 2) {
             auto stop_bss = boost::chrono::high_resolution_clock::now();
@@ -475,9 +477,10 @@ bool Pose_extraction::transform_to_world(const std_msgs::Header &from_header, ge
         tfGeom = tf_buffer.lookupTransform(this->world_tf_frame_id, from_header.frame_id, from_header.stamp);
     }
     catch (tf2::TransformException &e) {
-
-        printf("No transform found in pose_extraction with this error messake:\n");
-        printf("%s", e.what());
+        if (debug >= 0) {
+            printf("No transform found in pose_extraction with this error messake:\n");
+            printf("%s", e.what());
+        }
         return false;
     }
 

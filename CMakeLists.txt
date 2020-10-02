@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(module-pose-estimation-conventional)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++14)
 
 ## Export compile_commands.json for autocompletion
 # set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

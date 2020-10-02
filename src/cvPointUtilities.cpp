@@ -152,7 +152,7 @@ void sortPointsClockwise(std::vector<cv::Point2f> &input_points)
               [&center](const cv::Point2f& a, const cv::Point2f& b) { return comparePointsClockwise(a, b, center); });
 }
 
-std::tuple<cv::Point3f, double, double> getPlaneFit(std::vector<cv::Point3f> depth_points) {
+std::tuple<cv::Point3f, double, double> getPlaneFit(std::vector<cv::Point3f> depth_points, int debug) {
     /// See https://www.ilikebigbits.com/2015_03_04_plane_from_points.html
     /// Function assumes that the normal vector is not too far off the z-axis
     cv::Point3f center = getAverage(depth_points);
@@ -173,7 +173,8 @@ std::tuple<cv::Point3f, double, double> getPlaneFit(std::vector<cv::Point3f> dep
     double b{(S_xz * S_xy - S_yz * S_xx) / D};
 
     if (D==0) {
-        printf("Points are on a line in getPlaneFit, D is 0.\n");
+        if (debug >= 0)
+            printf("Points are on a line in getPlaneFit, D is 0.\n");
         a = b = 0;
     }
 

@@ -47,7 +47,7 @@ bool comparePointsClockwise(cv::Point2f a, cv::Point2f b, const cv::Point2f& mea
 
 /// Fits a plane to the input points that goes through the average of the points
 /// Implementation of https://www.ilikebigbits.com/2015_03_04_plane_from_points.html
-std::tuple<cv::Point3f, double, double> getPlaneFit(std::vector<cv::Point3f> depth_points);
+std::tuple<cv::Point3f, double, double> getPlaneFit(std::vector<cv::Point3f> depth_points, int debug=0);
 
 
 

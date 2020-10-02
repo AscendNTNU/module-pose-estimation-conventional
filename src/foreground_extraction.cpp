@@ -19,8 +19,6 @@ cv::Mat generate_foreground_mask(const cv::Mat &depth_image, const int &depth_me
     cv::Mat temp_dilated;
     cv::dilate(temp, temp_dilated, kernel_element);
 
-
-
     return temp_dilated;
 
 }
