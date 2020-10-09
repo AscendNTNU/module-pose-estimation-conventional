@@ -373,7 +373,7 @@ bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat
             std::printf("Found more than 4 points: %d \n", (int)hull_approx.size());
         return false;
     }
-    else if (hull_approx.size() > 4)
+    else if (hull_approx.size() < 4)
     {
         if (debug > 0)
             std::printf("Found less than 4 points: %d \n", (int)hull_approx.size());
