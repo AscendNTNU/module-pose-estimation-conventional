@@ -6,12 +6,12 @@
 
 Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it) : nh_(nh), it_(it), BlueSquareScoreCalculator{}
 {
-    if (debug > 0) {
+    if (this->debug > 0) {
         // Initialize openCV window
         cv::namedWindow(INPUT_WINDOW);
         moveWindow(INPUT_WINDOW, 10, 10);
-        // cv::namedWindow(RESULT_WINDOW);
-        // moveWindow(RESULT_WINDOW, 720, 10);
+        cv::namedWindow(RESULT_WINDOW);
+        moveWindow(RESULT_WINDOW, 720, 10);
         // cv::namedWindow(DEPTH_WINDOW);
         // moveWindow(DEPTH_WINDOW, 10,540);
         // cv::namedWindow(DEPTH_MASK_WINDOW);
@@ -21,7 +21,7 @@ Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTran
 
 Pose_extraction::~Pose_extraction()
 {
-    if (debug > 0) {
+    if (this->debug > 0) {
         cv::destroyAllWindows();
     }
 }
@@ -39,45 +39,34 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
     smoothed_depth_image = dilate_depth_image(cv_ptr_depth->image, this->depth_dilation_kernel_size);
     depth_mask = generate_foreground_mask(smoothed_depth_image, this->depth_mean_offset_value, this->mask_dilation_kernel_size);
 
-    cv_ptr_bgr->image.copyTo(this->cv_work_image); // Deepcopy the image to the work image. This is so the work image is a three channel image.
-
     /// Find the blue parts of the image:
     cv::Mat blueness_image;
-    greyFromImgConversion(cv_ptr_bgr->image, blueness_image, IMG_CONVERSION::HSV, depth_mask);
-    blueness_image.copyTo(cv_work_image);
+    bluenessImageMasked(cv_ptr_bgr->image, blueness_image, depth_mask, true);
 
     /// Find a rectangle in which the blue square *at least* lies within
-    cv::Rect bounding_rectangle;
-    findOuterBoundingRectangle(cv_ptr_bgr, cv_work_image, bounding_rectangle);
-    if (bounding_rectangle == cv::Rect{0, 0, 0, 0})
+    auto [inner_bounding_rectangle, outer_bounding_rectangle] =
+            getBoundingRectangle(blueness_image);
+    if (inner_bounding_rectangle == cv::Rect{0, 0, 0, 0})
         return; // Return when no rectangle is found
 
-    /// Do feature detection to find approximate position of image and confirm that the image contains
-    /// the blue plate within the bounding rectangle
-    std::vector<cv::Point2f> points_found;
-    getInnerBoundingRectangle(bounding_rectangle, points_found);
-
     /// Find the exact transform in the given image
-    std::vector<cv::Point2f> corner_points;
-    bool is_blue_square;
-    is_blue_square = findCornerPoints(cv_ptr_bgr, cv_work_image, points_found, bounding_rectangle, corner_points);
+    std::vector<cv::Point2f> corner_points =
+            findCornerPoints(cv_ptr_bgr->image, blueness_image, inner_bounding_rectangle, outer_bounding_rectangle);
 
-    // If succsessful, find pose and publish
-    if (is_blue_square && this->has_depth_camera_info)
-    {
+    if (!corner_points.empty() && this->has_depth_camera_info) {
         geometry_msgs::PoseWithCovarianceStamped pose_with_cov_stamped;  ///< Object for publishing
         getCameraPoseWithCov(cv_ptr_depth->image, corner_points,
                              this->depth_camera_info_K_arr, this->depth_camera_info_D,
-                             pose_with_cov_stamped, debug);
+                             pose_with_cov_stamped, this->debug);
 
-        if (transform_to_world(header_in, pose_with_cov_stamped)) {
+        if (transform_to_world(pose_with_cov_stamped, header_in))
             this->pose_publisher.publish(pose_with_cov_stamped);
-        };
-
     }
 
-    if (debug > 0) {
-        if (debug % 2) {
+
+
+    if (this->debug > 0) {
+        if (this->debug % 2) {
             // Timer endpoint and print
             auto stop = boost::chrono::high_resolution_clock::now();
             auto duration = boost::chrono::duration_cast<boost::chrono::milliseconds>(stop - debug_timer_start);
@@ -87,7 +76,7 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
         }
         // Update GUI Windows
         cv::imshow(INPUT_WINDOW, cv_ptr_bgr->image);
-        // cv::imshow(RESULT_WINDOW, blueness_image);
+        cv::imshow(RESULT_WINDOW, blueness_image);
         // cv::imshow(DEPTH_WINDOW, smoothed_depth_image);
         // cv::imshow(DEPTH_MASK_WINDOW, depth_mask);
         cv::waitKey(1);
@@ -131,21 +120,18 @@ bool Pose_extraction::importImageDepth(const sensor_msgs::ImageConstPtr &msg, cv
     }
 };
 
-void Pose_extraction::findOuterBoundingRectangle(const cv_bridge::CvImagePtr &cv_ptr_in, const cv::Mat &blueness_image,
-                                                 cv::Rect &bounding_rectangle)
+std::tuple<cv::Rect, cv::Rect> Pose_extraction::getBoundingRectangle(const cv::Mat &blueness_image)
 {
-
-    cv::Mat cv_im_tmp_out; ///< Temporary output var, to be copied over cv_ptr_in->image before function return
-    cv_ptr_in->image.copyTo(cv_im_tmp_out);
-
     /// Find a probable area in which the plate is
 
     // Blur:
     cv::Mat blueness_threshold_image;                                                              // TODO: Make work image
     cv::GaussianBlur(blueness_image, blueness_threshold_image, cv::Size(17, 17), 3, 3);            // Tweal
+
+    // Threshold vals
     cv::threshold(blueness_threshold_image, blueness_threshold_image, 80, 255, cv::THRESH_BINARY); // Tweak: Test adaptive threshold
 
-    // Open then dilate the threshold
+    // Erode then dilate the threshold
     cv::erode(blueness_threshold_image, blueness_threshold_image, cv::Mat(), cv::Point(-1, -1), 2);  // Tweak
     cv::dilate(blueness_threshold_image, blueness_threshold_image, cv::Mat(), cv::Point(-1, -1), 2); //Tweak
 
@@ -156,7 +142,6 @@ void Pose_extraction::findOuterBoundingRectangle(const cv_bridge::CvImagePtr &cv
     // Add the square-candidates to a list with a score
     std::vector<cv::Rect> candidates;
     std::vector<int> candidate_scores;
-    cv::Scalar color(0, 255, 0);
 
     for (int i = 1; i < stats.rows; i++)
     {
@@ -169,63 +154,50 @@ void Pose_extraction::findOuterBoundingRectangle(const cv_bridge::CvImagePtr &cv
         int h = stats.at<int>(cv::Point(3, i));
 
         cv::Rect rect(x, y, w, h);
-        cv::Rect featureDetectionRect(x - w / 2, y - w / 2, w * 2, h + w); // New verision as of 2020-03-03
         // cv::rectangle(blueness_threshold_image, rect, color);
-        cv::rectangle(cv_im_tmp_out, rect, color);
 
         // The first int is the candidate score. The higher the better. Size * low position * squareness.
-        candidates.emplace_back(featureDetectionRect);
+        candidates.emplace_back(rect);
         candidate_scores.emplace_back(stats.at<int>(cv::Point(4, i)) * (100 + y + h / 2) * ((8 * h) / w) * (16 - (8 * h) / w)); // TODO: This heuristic is ugly
     }
-    // If we have no candidates, make a default one:
+    // If we have no candidates, return a dummy value:
     if (candidates.empty())
     {
-        bounding_rectangle = cv::Rect{0, 0, 0, 0};
-    }
-    else
-    {
-        int highestScoreIndex = std::max_element(candidate_scores.begin(), candidate_scores.end()) - candidate_scores.begin();
-        bounding_rectangle = candidates.at(highestScoreIndex);
-        cv::rectangle(cv_im_tmp_out, bounding_rectangle, cv::Scalar(0, 0, 255));
+        return {cv::Rect{0, 0, 0, 0}, cv::Rect{0, 0, 0, 0}};
     }
 
-    // TODO: Remove when making cv_ptr_in const
-    cv_im_tmp_out.copyTo(cv_ptr_in->image);
+    // Find highest scoring candidate
+    int highestScoreIndex = std::max_element(candidate_scores.begin(), candidate_scores.end()) - candidate_scores.begin();
+    cv::Rect bounding_rect = candidates.at(highestScoreIndex);
+
+    // Create an outer bounding rectangle with additional padding
+    cv::Rect outer_bounding_rect(
+            bounding_rect.x - bounding_rect.width / 2,
+            bounding_rect.y - bounding_rect.width / 2,
+            bounding_rect.width * 2,
+            bounding_rect.height + bounding_rect.width
+            );
+
+    return {bounding_rect, outer_bounding_rect};
+
 }
 
-bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat &worked_image,
-                                       const std::vector<cv::Point2f> &expected_corners, cv::Rect &bounding_rect,
-                                       std::vector<cv::Point2f> &cornerpoints_out)
+std::vector<cv::Point2f> Pose_extraction::findCornerPoints(Mat &cv_color_image, const cv::Mat &blueness_image,
+                                                           const cv::Rect &inner_bounding_rect,
+                                                           cv::Rect outer_bounding_rect)
 {
-    cv::Mat im_out;
-    cv_ptr_in->image.copyTo(im_out);
-    cv::Mat im_tmp;
-    cv::Mat im_tmp2;
-    // Make sure the bounding_rect contains the expected corners
-    for (const cv::Point2f &corner : expected_corners)
-    {
-        if (corner.x < bounding_rect.x)
-            bounding_rect.x = corner.x;
-        if (corner.x > bounding_rect.x + bounding_rect.width)
-            bounding_rect.width = corner.x - bounding_rect.x;
-        if (corner.y < bounding_rect.y)
-            bounding_rect.y = corner.y;
-        if (corner.y > bounding_rect.y + bounding_rect.width)
-            bounding_rect.height = corner.y - bounding_rect.y;
-    }
-    // Make sure the bounding_rect is not outside the window
-    limitCroppingRectangle(bounding_rect, cv_ptr_in->image.cols, cv_ptr_in->image.rows);
+    // Make sure the bounding_rect contains the inner bounding rect and is not outside the window
+    outer_bounding_rect = limitOuterCroppingRectangle(outer_bounding_rect, inner_bounding_rect, cv_color_image.cols, cv_color_image.rows);
 
-    cv::Mat worked_crop_image = worked_image(bounding_rect);
+    // Cropped image
+    cv::Mat im_tmp = blueness_image(outer_bounding_rect);
 
-    // worked_image must be the grayscale-image with blue-subtraction to do canny on
+    // blueness_image must be the grayscale-image with blue-subtraction to do canny on
     double canny_ratio = 2;                // Default: 2-3
     int const canny_max_lowThreshold = 80; // Default: 80
     int canny_kernel_size = 3;             // Default: 3
-    cv::Canny(worked_crop_image, im_tmp, canny_max_lowThreshold, canny_max_lowThreshold * canny_ratio);
-    im_tmp.copyTo(im_out);
-    // TODO: This is for debug
-    cv::Canny(worked_image, im_out, canny_max_lowThreshold, canny_max_lowThreshold * canny_ratio);
+    // Canny edge image
+    cv::Canny(im_tmp, im_tmp, canny_max_lowThreshold, canny_max_lowThreshold * canny_ratio);
 
     /// HoughLines
     enum class LINE_METHOD
@@ -233,7 +205,6 @@ bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat
         Hough,
         HoughP
     };
-
     std::vector<cv::Vec2f> lines;
     switch (LINE_METHOD::HoughP)
     { // Tweak
@@ -249,40 +220,36 @@ bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat
 
         break;
     }
-    //im_tmp.convertTo(cv_ptr_in->image, CV_U8C3);
+
     /// The good lines, thresholded lines
     std::vector<cv::Vec2f> lines_good;
 
-    // TODO: Fix this line cutoff function
     // Ignore the line if it is too far off the cartesian axes:
     constexpr int cutoff = 4; ///< The biggest accepted deviation from the +-x, +-y axes allowed for a line: pi/(2*cutoff)
     for (auto &line : lines)
     {
-
         double theta_m = std::fmod(line[1], CV_PI / 2);
-
         /// Why exactly does this give the correct cutoff? I thought it would cut twice as aggressively (half of the angle it currently does)
         if (CV_PI / (2 * cutoff) >= theta_m || theta_m >= (cutoff - 1) * CV_PI / (cutoff * 2))
-        {
             lines_good.emplace_back(line);
-        };
     };
 
     /// Draw the lines on the image
     // drawLines(cv_ptr_in->image, lines_good, 100, cv::Point{bounding_rect.x, bounding_rect.y});
 
     /// Find all the line intersections
-    std::vector<cv::Point2f> intersections = computeMultiIntersections(lines_good, 3 * CV_PI / 8, cv::Point2f{0, 0});
+    std::vector<cv::Point2f> intersections =
+            computeMultiIntersections(lines_good, 3 * CV_PI / 8, cv::Point2f{0, 0});
 
     /// Remove all points outside the bounding rectangle. This is optional. Tweak (maybe expand the boundaries?
     intersections.erase(std::remove_if(intersections.begin(), intersections.end(),
-                                       [bounding_rect](cv::Point2f p) { return p.x < 0 || p.x > bounding_rect.width ||
-                                                                               p.y < 0 || p.y > bounding_rect.height; }),
+                                       [outer_bounding_rect](cv::Point2f p) { return p.x < 0 || p.x > outer_bounding_rect.width ||
+                                                                               p.y < 0 || p.y > outer_bounding_rect.height; }),
                         intersections.end());
 
     /// If there are no intersection points, there is nothing to work with
     if (intersections.empty())
-        return false;
+        return std::vector<cv::Point2f>{};
 
     /// Do clustering of the points, and draw the cluster. Seems unnecessary when using convex hull,
     /// but might be relevant later. Is prone to errors anyway.
@@ -310,92 +277,41 @@ bool Pose_extraction::findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat
     }
     */
 
-    /// Draw the convex hull of all the points in purple
     std::vector<cv::Point2i> hull;
-    if (!intersections.empty())
-    {
-        std::vector<cv::Point2i> intersections_int(intersections.size());
-        for (unsigned long i{0}; i < intersections.size(); i++)
-        {
-            intersections_int.at(i) = intersections.at(i);
-        }
-
-        cv::convexHull(intersections_int, hull);
-
-        //        drawCycle(cv_ptr_in->image, hull, cv::Point2i{bounding_rect.x, bounding_rect.y},
-        //                  cv::Scalar{128, 0, 256});
-    }
-    //void onLinePointsRemoved(hull, line_dist_thresh)
+    std::vector<cv::Point2i> tmp(intersections.size());
+    for (int i{0}; i < intersections.size(); i++)
+        tmp.at(i) = intersections.at(i);
+    cv::convexHull(tmp, hull);
 
     std::vector<cv::Point2f> hull_approx;
     cv::approxPolyDP(hull, hull_approx, 1, true); // Tweak
 
-    double score;
-    if (hull_approx.size() == 4)
+    // If all points
+    if (hull_approx.size() != 4)
     {
-        sortPointsClockwise(hull_approx);
-        /// Draw the points
-        /*cv::circle(cv_ptr_in->image, cv::Point2f{hull_approx[0].x + bounding_rect.x, hull_approx[0].y + bounding_rect.y},
-                   1, cv::Scalar{255, 0, 0}, 2);
-        cv::circle(cv_ptr_in->image, cv::Point2f{hull_approx[1].x + bounding_rect.x, hull_approx[1].y + bounding_rect.y},
-                   1, cv::Scalar{0, 255, 0}, 2);
-        cv::circle(cv_ptr_in->image, cv::Point2f{hull_approx[2].x + bounding_rect.x, hull_approx[2].y + bounding_rect.y},
-                   1, cv::Scalar{0, 0, 255}, 2);
-        cv::circle(cv_ptr_in->image, cv::Point2f{hull_approx[3].x + bounding_rect.x, hull_approx[3].y + bounding_rect.y},
-                   1, cv::Scalar{0, 0, 0}, 2);*/
-        /// ---------------------------------------------------------------
-        /// Torleiv the man
-        /// ---------------------------------------------------------------
-        cv::Point2f offset{static_cast<float>(bounding_rect.x), static_cast<float>(bounding_rect.y)};
-        score = cornerPointScore(cv_ptr_in->image, worked_image,
-                                 hull_approx + offset);
+        if (this->debug > 0)
+            std::printf("Did not find 4 points: %d \n", (int)hull_approx.size());
+        return std::vector<cv::Point2f>{};
+    }
 
+    sortPointsClockwise(hull_approx);
+
+    cv::Point2f offset{static_cast<float>(outer_bounding_rect.x), static_cast<float>(outer_bounding_rect.y)};
+    double score = cornerPointScore(cv_color_image, hull_approx + offset);
+
+    if (this->debug > 0)
+    {
         if (score > 0.2)
-        {
-            drawCycle(cv_ptr_in->image, hull_approx, cv::Point2i{bounding_rect.x, bounding_rect.y},
+            drawCycle(cv_color_image, hull_approx, cv::Point2i{outer_bounding_rect.x, outer_bounding_rect.y},
                       cv::Scalar{128, 0, 256}, true);
-
-            cornerpoints_out = hull_approx + offset;
-            im_out.copyTo(debug_window);
-        }
         else
-        {
-            drawCycle(cv_ptr_in->image, hull_approx, cv::Point2i{bounding_rect.x, bounding_rect.y},
+            drawCycle(cv_color_image, hull_approx, cv::Point2i{outer_bounding_rect.x, outer_bounding_rect.y},
                       cv::Scalar{0, 128, 256}, true);
-        }
     }
-
-    im_out.copyTo(debug_window);
-
-    if (hull_approx.size() > 4)
-    {
-        if (debug > 0)
-            std::printf("Found more than 4 points: %d \n", (int)hull_approx.size());
-        return false;
-    }
-    else if (hull_approx.size() < 4)
-    {
-        if (debug > 0)
-            std::printf("Found less than 4 points: %d \n", (int)hull_approx.size());
-        return false;
-    }
+    if (score > 0.2)
+        return hull_approx + offset;
     else
-    {
-        return score > 0.2;
-    }
-
-    /// Find probable good corners with goodFeaturesToTrack. Not promising as of 2020-02-27,
-    /// but might improve with better blueness image
-    /*
-    std::vector<cv::Point2f> gftt_corners;
-    constexpr int gfft_max_corners{50};
-    constexpr float gftt_qualitylevel{0.01};
-    constexpr float gftt_min_distance{5};
-    cv::goodFeaturesToTrack(worked_crop_image, gftt_corners,
-            gfft_max_corners, gftt_qualitylevel, gftt_min_distance);
-
-    drawPoints(cv_ptr_in->image, gftt_corners, cv::Point2i{bounding_rect.x, bounding_rect.y});
-*/
+        return std::vector<cv::Point2f>{};
 };
 
 void Pose_extraction::getInnerBoundingRectangle(const cv::Rect &bounding_rect, std::vector<cv::Point2f> &points_out)
@@ -418,7 +334,7 @@ void Pose_extraction::getInnerBoundingRectangle(const cv::Rect &bounding_rect, s
     points_out.emplace_back(cv::Vec2i(x, y + h));
 }
 
-double Pose_extraction::cornerPointScore(cv::Mat &image_in, cv::Mat &blueness_image, const std::vector<cv::Point2f> &corners_in)
+double Pose_extraction::cornerPointScore(const Mat &image_in, const std::vector<cv::Point2f> &corners_in)
 {
     /*Testing only*/ cv::Point2f dst_quad[4];
     /* This is for testing only
@@ -438,9 +354,9 @@ double Pose_extraction::cornerPointScore(cv::Mat &image_in, cv::Mat &blueness_im
     double res;
     res = BlueSquareScoreCalculator.getBlueSquareScore(image_in, dst_quad);
 
-    if (debug > 0) {
+    if (this->debug > 0) {
         std::cout << "BSS result: " << res << "\n";
-        if (debug % 2) {
+        if (this->debug % 2) {
             auto stop_bss = boost::chrono::high_resolution_clock::now();
             auto duration_bss = boost::chrono::duration_cast<boost::chrono::milliseconds>(stop_bss - debug_start_bss);
             std::string print_info = duration_bss.count() < 10 ? "BSS_Function time: 0" : "BSS_Function time: ";
@@ -470,15 +386,15 @@ void Pose_extraction::depthCameraInfoCb(const boost::shared_ptr<sensor_msgs::Cam
     this->has_depth_camera_info = true;
 }
 
-bool Pose_extraction::transform_to_world(const std_msgs::Header &from_header, geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped) {
-
+bool Pose_extraction::transform_to_world(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
+                                         const std_msgs::Header &from_header) {
     geometry_msgs::TransformStamped tfGeom;
     try {
         tfGeom = tf_buffer.lookupTransform(this->world_tf_frame_id, from_header.frame_id, from_header.stamp);
     }
     catch (tf2::TransformException &e) {
-        if (debug >= 0) {
-            printf("No transform found in pose_extraction with this error messake:\n");
+        if (this->debug >= 0) {
+            printf("No transform found in pose_extraction with this error message:\n");
             printf("%s", e.what());
         }
         return false;
@@ -533,32 +449,38 @@ cv::Point2f computeIntersect(const cv::Vec2f &line1, const cv::Vec2f &line2, con
     return intersect;
 }
 
-bool limitCroppingRectangle(cv::Rect &rect, const int &im_width, const int &im_height)
+cv::Rect limitOuterCroppingRectangle(cv::Rect rect, const cv::Rect &inner_rect, const int &im_width, const int &im_height)
 {
-    bool changed = false;
+    // Expand outer bounding rectangle to contain inner bounding rectangle
+    if (inner_rect.x < rect.x)
+        rect.x = inner_rect.x;
+    if (inner_rect.x + inner_rect.width > rect.x + rect.width)
+        rect.width = inner_rect.x + inner_rect.width - rect.x;
+    if (inner_rect.y < rect.y)
+        rect.y = inner_rect.y;
+    if (inner_rect.y + inner_rect.height > rect.y + rect.height)
+        rect.height = inner_rect.y + inner_rect.height - rect.y;
+
+    // Limit outer bounding rectangle to the size of the image
     if (rect.x < 0)
     {
         rect.width += rect.x;
         rect.x = 0;
-        changed = true;
     }
     if (rect.x + rect.width > im_width)
     {
         rect.width = im_width - rect.x;
-        changed = true;
     }
     if (rect.y < 0)
     {
         rect.height += rect.y;
         rect.y = 0;
-        changed = true;
     }
     if (rect.y + rect.height > im_height)
     {
         rect.height = im_height - rect.y;
-        changed = true;
     }
-    return changed;
+    return rect;
 }
 
 std::vector<cv::Point2f> lineToPointPair(const cv::Vec2f &line)
@@ -576,10 +498,10 @@ std::vector<cv::Point2f> lineToPointPair(const cv::Vec2f &line)
     return points;
 }
 
-void greyFromImgConversion(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, IMG_CONVERSION conversion_type, const cv::Mat &depth_mask, const bool &blur)
+void bluenessImageMasked(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, const cv::Mat &depth_mask, const bool &blur)
 {
     /// Calculate the image without the mask (and without blurring)
-    greyFromImgConversion(im_in_bgr, im_grey_out, conversion_type, false);
+    bluenessImage(im_in_bgr, im_grey_out, false);
 
     /// Apply the mask:
     cv::bitwise_and(im_grey_out, depth_mask, im_grey_out);
@@ -589,7 +511,7 @@ void greyFromImgConversion(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, IMG_C
         cv::GaussianBlur(im_grey_out, im_grey_out, cv::Size(17, 17), 3, 3);
 }
 
-void greyFromImgConversion(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, IMG_CONVERSION conversion_type, const bool &blur)
+void bluenessImage(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, const bool &blur)
 {
     cv::Mat im_tmp;
 
@@ -601,161 +523,36 @@ void greyFromImgConversion(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, IMG_C
     //          Sun/shadow Outdoor:         {116, 129,  92}, HSV: {106, 167, 167}, RGB: 58,  110, 168
     //          Shadow/sun Outdoor:         { 84, 136,  92}, HSV: {109, 175, 137}, RGB: 43,  78,  137
 
-    switch (conversion_type)
+    cv::cvtColor(im_in_bgr, im_grey_out, cv::COLOR_BGR2HSV);
     {
-    case IMG_CONVERSION::Lab:
-    {
-        cv::cvtColor(im_in_bgr, im_grey_out, cv::COLOR_BGR2Lab);
-        cv::Scalar color{132, 125, 118};
+        cv::Scalar color{102, 110, 200};
 
         im_tmp.convertTo(im_tmp, CV_32SC3);
         im_grey_out.copyTo(im_tmp);
+
         cv::absdiff(im_tmp, color, im_tmp);
 
-        //std::string test_string{"Color of middle pixel: J: " +
-        //                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[0]) + "  a: " +
-        //                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[1]) + "  b: " +
-        //                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[2]) + "\n"};
-        //std::cout << test_string;
-
-        // Modify channels of Lab image seperately
-
+        /// Modify channels of HSV image seperately
         std::vector<cv::Mat> channels(3);
         cv::split(im_tmp, channels);
-        channels[0] = channels[0] * 0.2 / (0.114 * 3); //* 0.25;  // Tweak
-        //cv::multiply(channels[0] - 0, channels[0] * 0.04, channels[0]);  // Tweak
-        channels[1] = channels[1] * 1 / (0.587 * 3); // Tweak
-        channels[2] = channels[2] * 1 / (0.299 * 3); // Tweak
+        // cv::multiply(channels[0], channels[0], channels[0]);
+        // Hue:
+        channels[0] = channels[0] * (3 * 255 / (180 * (0.114 * 3))); // Tweak
+        // Saturation
+        channels[1] = channels[1] * (0.0625 / (0.587 * 3)); //.025;  // Tweak
+        // Value:
+        channels[2] = channels[2] * (0.0625 / (0.299 * 3)); //.025;  // Tweak
         merge(channels, im_tmp);
 
         im_tmp = cv::abs(im_tmp);
         im_tmp.convertTo(im_grey_out, CV_8UC3);
         cv::cvtColor(im_grey_out, im_grey_out, cv::COLOR_BGR2GRAY);
 
-        int trunc_part = 32; // Tweak  // For each pixel, multiply it by trunc_part and truncate the values over 255 to 255
+        int trunc_part = 16; // Tweak  // For each pixel, multiply it by trunc_part and truncate the values over 255 to 255
         // The rest is truncated to max
         im_grey_out = im_grey_out * trunc_part;
     }
-    break;
 
-    case IMG_CONVERSION::HSV:
-        cv::cvtColor(im_in_bgr, im_grey_out, cv::COLOR_BGR2HSV);
-        {
-            cv::Scalar color{102, 110, 200};
-
-            im_tmp.convertTo(im_tmp, CV_32SC3);
-            im_grey_out.copyTo(im_tmp);
-
-            cv::absdiff(im_tmp, color, im_tmp);
-
-            /// Modify channels of HSV image seperately
-            std::vector<cv::Mat> channels(3);
-            cv::split(im_tmp, channels);
-            // cv::multiply(channels[0], channels[0], channels[0]);
-            // Hue:
-            channels[0] = channels[0] * (3 * 255 / (180 * (0.114 * 3))); // Tweak
-            // Saturation
-            channels[1] = channels[1] * (0.0625 / (0.587 * 3)); //.025;  // Tweak
-            // Value:
-            channels[2] = channels[2] * (0.0625 / (0.299 * 3)); //.025;  // Tweak
-            merge(channels, im_tmp);
-
-            im_tmp = cv::abs(im_tmp);
-            im_tmp.convertTo(im_grey_out, CV_8UC3);
-            cv::cvtColor(im_grey_out, im_grey_out, cv::COLOR_BGR2GRAY);
-
-            int trunc_part = 16; // Tweak  // For each pixel, multiply it by trunc_part and truncate the values over 255 to 255
-            // The rest is truncated to max
-            im_grey_out = im_grey_out * trunc_part;
-        }
-        break;
-
-    case IMG_CONVERSION::Lab_MultiThresh:
-        cv::cvtColor(im_in_bgr, im_grey_out, cv::COLOR_BGR2HSV);
-        im_tmp.convertTo(im_tmp, CV_32SC3);
-        im_grey_out.copyTo(im_tmp);
-        {
-
-            // Thresholding H-values:
-            constexpr int THRESH_L_LOWER{70}, THRESH_L_UPPER{250};
-            constexpr int THRESH_a_LOWER{90}, THRESH_a_UPPER{145};
-            constexpr int THRESH_b_LOWER{60}, THRESH_b_UPPER{130};
-
-            // Debug
-            //std::cout << "Im_tmp: " << matType2str(im_tmp.type())
-            //          << "    im_grey_out: " << matType2str(im_grey_out.type()) << "\n";
-
-            // Debug
-            {
-                //std::string test_string{"Color of middle pixel: H: " +
-                ///                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[0]) + "  S: " +
-                ///                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[1]) + "  V: " +
-                ///                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[2]) + "\n"};
-                ///std::cout << test_string;
-            }
-
-            // Modify channels of Lab image seperately
-
-            {
-                std::vector<cv::Mat> channels(3);
-                cv::split(im_tmp, channels);
-
-                cv::threshold(channels[0], channels[0], THRESH_L_UPPER, 255, cv::THRESH_TOZERO_INV);
-                cv::threshold(channels[0], channels[0], THRESH_L_LOWER, 255, cv::THRESH_BINARY);
-                cv::threshold(channels[1], channels[1], THRESH_a_UPPER, 255, cv::THRESH_TOZERO_INV);
-                cv::threshold(channels[1], channels[1], THRESH_a_LOWER, 255, cv::THRESH_BINARY);
-                cv::threshold(channels[2], channels[2], THRESH_b_UPPER, 255, cv::THRESH_TOZERO_INV);
-                cv::threshold(channels[2], channels[2], THRESH_b_LOWER, 255, cv::THRESH_BINARY);
-
-                channels[0] = channels[0] & channels[1] & channels[2];
-                channels[0].copyTo(im_tmp);
-                //merge(channels, im_tmp);
-            }
-        }
-        im_tmp.convertTo(im_grey_out, CV_8UC3);
-        break;
-
-    case IMG_CONVERSION::HSV_MultiThresh:
-        cv::cvtColor(im_in_bgr, im_grey_out, cv::COLOR_BGR2Lab);
-        im_tmp.convertTo(im_tmp, CV_32SC3);
-        im_grey_out.copyTo(im_tmp);
-
-        // Thresholding H-values:
-        {
-            constexpr int THRESH_H_LOWER{95}, THRESH_H_UPPER{125};
-            constexpr int THRESH_S_LOWER{60}, THRESH_S_UPPER{190};
-            constexpr int THRESH_V_LOWER{100}, THRESH_V_UPPER{255};
-
-            // Debug
-            {
-                //std::string test_string{"Color of middle pixel: H: " +
-                ///                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[0]) + "  S: " +
-                ///                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[1]) + "  V: " +
-                ///                        std::to_string(im_tmp.at<cv::Vec3b>(400, 600)[2]) + "\n"};
-                ///std::cout << test_string;
-            }
-
-            // Modify channels of Lab image seperately
-
-            {
-                std::vector<cv::Mat> channels(3);
-                cv::split(im_tmp, channels);
-
-                cv::threshold(channels[0], channels[0], THRESH_H_UPPER, 255, cv::THRESH_TOZERO_INV);
-                cv::threshold(channels[0], channels[0], THRESH_H_LOWER, 255, cv::THRESH_BINARY);
-                cv::threshold(channels[1], channels[1], THRESH_S_UPPER, 255, cv::THRESH_TOZERO_INV);
-                cv::threshold(channels[1], channels[1], THRESH_S_LOWER, 255, cv::THRESH_BINARY);
-                cv::threshold(channels[2], channels[2], THRESH_V_UPPER, 255, cv::THRESH_TOZERO_INV);
-                cv::threshold(channels[2], channels[2], THRESH_V_LOWER, 255, cv::THRESH_BINARY);
-
-                channels[0] = channels[0] & channels[1] & channels[2];
-                channels[0].copyTo(im_tmp);
-                //merge(channels, im_tmp);
-            }
-        }
-        im_tmp.convertTo(im_grey_out, CV_8UC3);
-        break;
-    }
 
     cv::bitwise_not(im_grey_out, im_grey_out);
 

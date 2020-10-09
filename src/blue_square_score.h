@@ -25,7 +25,7 @@ private:
 
 public:
     blueSquareScore();
-    double getBlueSquareScore(cv::Mat &image_in, const Point_<float> *dst_quad);
+    double getBlueSquareScore(const cv::Mat &image_in, const Point_<float> *dst_quad);
 };
 
 

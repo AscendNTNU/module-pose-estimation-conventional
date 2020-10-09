@@ -6,7 +6,7 @@
 #include <ros/package.h>
 
 
-double blueSquareScore::getBlueSquareScore(cv::Mat &image_in,const Point_<float> *dst_quad) {
+double blueSquareScore::getBlueSquareScore(const cv::Mat &image_in,const Point_<float> *dst_quad) {
     
     homography = cv::getPerspectiveTransform(dst_quad, src_quad);
 

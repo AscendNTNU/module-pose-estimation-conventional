@@ -83,12 +83,12 @@ private:
      * can work quickly on a smaller part of the image, and to work as a "narrowing down" algorithm to work further
      * on the image cropped by the bounding rectangle.
      *
-     * @param[in] cv_ptr_in: The input image in which to determine where the blue square is.
-     * @param[out] blueness_image: A copy of the cv_ptr_in.image, made to be modified and worked on. Should return the image from greyFromImgConversion
+     * @param[in] cv_im_draw_on: The input image in which to determine where the blue square is.
+     * @param[out] blueness_image: A copy of the cv_ptr_in.image, made to be modified and worked on. Should return the image from bluenessImageMasked
      * @param[out] bounding_rectangle: The bounding rectangle in which the blue square lies. Returns cv::Rect{0, 0, 0, 0} when nothing is found.
      */
-    void findOuterBoundingRectangle(const cv_bridge::CvImagePtr &cv_ptr_in, const cv::Mat &blueness_image,
-                                    cv::Rect& bounding_rectangle); //TODO: Add const to input
+    std::tuple<cv::Rect, cv::Rect>
+    getBoundingRectangle(const cv::Mat &blueness_image); //TODO: Add const to input
 
 
     /**
@@ -104,21 +104,20 @@ private:
      *
      * Will find some more exact points for the corners of the square, and return them in "cornerpoints_out".
      *
-     * @param[in] cv_ptr_in: Full input image (not cropped) to find features of
-     * @param[in] worked_image: Blueness grayscale image, from greyFromImgConversion (via findOuterBoundingRectangle)
-     * @param[in] expected_corners: The corners of the blue square (in the image) from the featureDetection algorithm (sift).
-     * @param[in] bounding_rect: The bounding rectangle from findOuterBoundingRectangle in which the box lies.
-     * @param[out] cornerpoints_out: The found cornerpoints of the square, sorted clockwise starting upper left
+     * @param[in] cv_color_image: Full input image (not cropped) to find features of
+     * @param[in] blueness_image: Blueness grayscale image, from bluenessImageMasked (via getBoundingRectangle)
+     * @param[in] inner_bounding_rect: The corners of the blue square (in the image) from the featureDetection algorithm (sift).
+     * @param[in] outer_bounding_rect: The bounding rectangle from getBoundingRectangle in which the box lies.
      * @returns bool: Whether the score of "cornerPointScore" is high enough for the result to be valid
      */
-    bool findCornerPoints(cv_bridge::CvImagePtr &cv_ptr_in, cv::Mat &worked_image,
-                          const std::vector<cv::Point2f> &expected_corners, cv::Rect &bounding_rect,
-                          std::vector<cv::Point2f>& cornerpoints_out); // TODO: Add TF to I/O of function
+    std::vector<cv::Point2f> findCornerPoints(Mat &cv_color_image, const cv::Mat &blueness_image,
+                                              const cv::Rect &inner_bounding_rect,
+                                              cv::Rect outer_bounding_rect); // TODO: Add TF to I/O of function
 
 
 public:
     // TODO: Make all debug statements check with this debug code (0 meaning no debug)
-    int debug{0};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps
+    int debug{1};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps
 
     Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it);
     ~Pose_extraction();
@@ -144,28 +143,13 @@ public:
 
     std::string world_tf_frame_id;  // frame_id of world frame
 
-    double cornerPointScore(Mat &image_in, Mat &blueness_image, const vector<cv::Point2f> &corners_in);
+    double cornerPointScore(const Mat &image_in, const std::vector<cv::Point2f> &corners_in);
 
     /// Transform the PoseWithCovStamped to worldspace (with changing metadata)
-    bool transform_to_world(const std_msgs::Header &from_header, geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped);
+    bool transform_to_world(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
+                            const std_msgs::Header &from_header);
 };
 
-/**
- * @brief Options for blue-pixel-detection algorithm.
- *
- * The different methods for finding the blue pixels to use in greyFromImgConversion
- * @see greyFromImgConversion
- */
-enum class IMG_CONVERSION{
-    /// Use a (not too well) calibrated distance in the CIELab color space, , weighting a and b higher than L
-    Lab,
-    /// Use a (a little better) calibrated distance in the HSV color space, weighting Hue higher than the rest
-    HSV,
-    /// Use thresholding on each channel in the Lab color space
-    Lab_MultiThresh,
-    /// Use thresholding on each channel in the HSV color space
-    HSV_MultiThresh
-};
 
 
 /**
@@ -182,8 +166,7 @@ enum class IMG_CONVERSION{
  * @param[in] depth_mask: Mask with areas to ignore (in black). Typically based on depth.
  * @param[in] blur: Whether to blur the result before returning. default: true
  */
-void greyFromImgConversion(const cv::Mat& im_in_bgr, cv::Mat& im_grey_out,
-        IMG_CONVERSION conversion_type, const cv::Mat& depth_mask, const bool& blur = true);
+void bluenessImageMasked(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, const cv::Mat &depth_mask, const bool &blur);
 
 /**
  * @brief Get a grayscale image of the 'blueness' of the input image. Brighter output -> more fitting.
@@ -193,10 +176,10 @@ void greyFromImgConversion(const cv::Mat& im_in_bgr, cv::Mat& im_grey_out,
  *
  * @param[in] im_in_bgr: The input image to determine the blueness of.
  * @param[out] im_grey_out: The output grayscale image of the blueness of the image.
- * @param[in] conv_type: The image conversion type. Choose different methods by choosing different IMG_CONVERSION enums.
+ * @param[in] conversion_type: The image conversion type. Choose different methods by choosing different IMG_CONVERSION enums.
  * @param[in] blur: Whether to blur the result before returning. default: true
  */
-void greyFromImgConversion(const cv::Mat& im_in_bgr, cv::Mat& im_grey_out, IMG_CONVERSION conv_type, const bool& blur = true);
+void bluenessImage(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, const bool &blur);
 
 //TODO: Move these tools to another .h/.cpp file
 /**
@@ -258,7 +241,7 @@ void linepointsToRadiusAngle(const std::vector<cv::Vec4i>& lines_points_in, std:
 std::string matType2str(int type);  // Debugging tool
 
 /// Make sure the cropping rectangle rect is within the constraints of an image with im_width and im_height
-bool limitCroppingRectangle(cv::Rect& rect, const int& im_width, const int& im_height);
+cv::Rect limitOuterCroppingRectangle(cv::Rect rect, const cv::Rect &inner_rect, const int &im_width, const int &im_height);
 
 /**
  * @brief Convert a vector of opencv-points to a vector of Pointdb for DBSCAN.
