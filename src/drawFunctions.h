@@ -6,7 +6,6 @@
 #define MODULE_POSE_ESTIMATION_DRAWFUNCTIONS_H
 
 #include <opencv2/opencv.hpp>
-#include "dbscan.h"
 
 /**
  * Draw lines on image.
@@ -26,11 +25,8 @@ std::vector<cv::Scalar> getNColors(int n);
 void drawLines(cv::Mat& image, const std::vector<cv::Vec2f>& lines, int max_lines=100,
                const cv::Point2f& offset=cv::Point2f{0, 0});
 
-/// Draw the clustered points from DBSCAN on image (with offset if provided)
-void drawClusteredPoints(cv::Mat& image, const DBSCAN& clustering, const cv::Point2i& offset=cv::Point{0, 0});
 
 /// Draw lines between points in a vector, connecting the last to the first point
-
 void drawCycle(cv::Mat& image, const std::vector<cv::Point2f>& points, const cv::Point2f& offset=cv::Point{0, 0},
                const cv::Scalar& color = cv::Scalar{0, 128, 256}, bool arrowed=false);
 

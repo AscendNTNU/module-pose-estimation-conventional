@@ -24,7 +24,6 @@
 
 #include "blue_square_score.h"
 #include "foreground_extraction.h"
-#include "dbscan.h"
 #include "drawFunctions.h"
 #include "depthToWorld.h"
 #include "cvPointUtilities.h"
@@ -242,29 +241,5 @@ std::string matType2str(int type);  // Debugging tool
 
 /// Make sure the cropping rectangle rect is within the constraints of an image with im_width and im_height
 cv::Rect limitOuterCroppingRectangle(cv::Rect rect, const cv::Rect &inner_rect, const int &im_width, const int &im_height);
-
-/**
- * @brief Convert a vector of opencv-points to a vector of Pointdb for DBSCAN.
- * @see dbPointVecToCv
- *
- * @param[in] points: A vector of some type of opencv points
- */
-template <typename T>
-std::vector<Pointdb> cvPointVecToDb(const std::vector<T>& points);
-
-/**
- * @brief Convert a vector of Pointdb to a vector of opencv points
- *
- * @see cvPointVecToDb
- *
- * @param[in] points: A vector of Pointdb points
- */
-std::vector<cv::Point2f> dbPointVecToCv(const std::vector<Pointdb>& points);
-
-/// Return the average of each clutser. If with_noise, include points with clusterID=-1 in its own entry
-std::vector<cv::Point2i> clusterAveragesInt(const DBSCAN& clustering, bool with_noise= true);
-
-void printPwC(const geometry_msgs::PoseWithCovarianceStamped& p);
-
 
 #endif //MODULE_POSE_ESTIMATION_POSE_EXTRACTION_H

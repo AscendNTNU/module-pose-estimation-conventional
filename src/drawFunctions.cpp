@@ -79,18 +79,6 @@ void drawLines(cv::Mat &image, const std::vector<cv::Vec2f> &lines, int max_line
 
 }
 
-void drawClusteredPoints(cv::Mat& image, const DBSCAN& clustering, const cv::Point2i& offset) {
-
-    std::vector<cv::Scalar> colors{getNColors(clustering.getMaxClusterID() + 1)};
-    const std::vector<Pointdb>& points{clustering.getPoints()};
-
-    for (unsigned long idx{0}; idx < points.size(); idx++) {
-        cv::Point2i center = cv::Point2i{static_cast<int>(points[idx].x), static_cast<int>(points[idx].y)} + offset;
-        cv::circle(image, center,
-                   1, colors.at(points[idx].clusterID + 1), 2);
-    }
-}
-
 
 void drawCycle(cv::Mat& image, const std::vector<cv::Point2f>& points, const cv::Point2f& offset,
                const cv::Scalar& color, bool arrowed) {

@@ -59,8 +59,7 @@ add_executable(pose_extraction_node
 	src/pose_extraction.cpp
 	src/blue_square_score.cpp
 	src/foreground_extraction.cpp
-	src/dbscan.cpp
-	src/depthToWorld.cpp 
+		src/depthToWorld.cpp
 	src/drawFunctions.cpp
 	src/cvPointUtilities.cpp)
 
