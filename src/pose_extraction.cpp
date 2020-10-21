@@ -49,18 +49,26 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
     if (inner_bounding_rectangle == cv::Rect{0, 0, 0, 0})
         return; // Return when no rectangle is found
 
-    /// Find the exact transform in the given image
+    /// Find the corner points in the blueness image
     std::vector<cv::Point2f> corner_points =
             findCornerPoints(cv_ptr_bgr->image, blueness_image, inner_bounding_rectangle, outer_bounding_rectangle);
 
     if (!corner_points.empty() && this->has_depth_camera_info) {
-        geometry_msgs::PoseWithCovarianceStamped pose_with_cov_stamped;  ///< Object for publishing
-        getCameraPoseWithCov(cv_ptr_depth->image, corner_points,
-                             this->depth_camera_info_K_arr, this->depth_camera_info_D,
-                             pose_with_cov_stamped, this->debug);
+        double scaling_towards_center{0.2};
+        std::vector<cv::Point3f> inner_corner_points =
+                getInnerCornerPoints(
+                        cv_ptr_depth->image, corner_points,
+                        this->depth_camera_info_K_arr, this->depth_camera_info_D,
+                        scaling_towards_center);
 
-        if (transformToWorld(pose_with_cov_stamped, header_in))
-            this->pose_publisher.publish(pose_with_cov_stamped);
+        if (checkSquareness(inner_corner_points, scaling_towards_center, this->debug)) {
+
+            geometry_msgs::PoseWithCovarianceStamped pose_with_cov_stamped =
+                    getCameraPoseWithCov(inner_corner_points, this->debug);
+            if (transformToWorld(pose_with_cov_stamped, header_in))
+                this->pose_publisher.publish(pose_with_cov_stamped);
+        }
+
     }
 
 

@@ -270,32 +270,87 @@ int worstFitPointIndex(const std::vector<cv::Point3f> &points, float thresh_fact
     else return -1;
 }
 
-bool getCameraPoseWithCov(const cv::Mat &depth_image, const std::vector<cv::Point2f> &corner_points,
-                          const std::vector<double> &depth_camera_info_K_arr, const std::vector<double> &depth_camera_info_D,
-                          geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped, int debug) {
+std::vector<cv::Point3f> getInnerCornerPoints(const cv::Mat &depth_image, const std::vector<cv::Point2f> &corner_points,
+                                              const std::vector<double> &depth_camera_info_K_arr,
+                                              const std::vector<double> &depth_camera_info_D, double scaling) {
 
-    std::vector<cv::Point2f> inner_corner_points{getScaledTowardsCenter(corner_points, 0.2)};  // Tweak scaling
+    std::vector<cv::Point2f> inner_corner_points{getScaledTowardsCenter(corner_points, scaling)};
     std::vector<cv::Point3f> depth_corner_points = findXYZ(inner_corner_points, depth_image, depth_camera_info_K_arr);
+
+    return depth_corner_points;
+
+}
+
+bool checkSquareness(const std::vector<cv::Point3f> &points, double scaling, int debug) {
+    /// TODO: Figure out why the camera is scaling by 1.6
+    // Expected square size parameters in meters
+    double side = 1.6 * 0.305 * (1-scaling); // 0.305 m == 1 foot == 12 inches
+    double diag = side*1.414;
+
+    double un_squareness = 0;
+    un_squareness += pow(sqrt(lengthSqr(points.at(0) - points.at(1))) - side, 2);
+    un_squareness += pow(sqrt(lengthSqr(points.at(1) - points.at(2))) - side, 2);
+    un_squareness += pow(sqrt(lengthSqr(points.at(2) - points.at(3))) - side, 2);
+    un_squareness += pow(sqrt(lengthSqr(points.at(3) - points.at(0))) - side, 2);
+    un_squareness += pow(sqrt(lengthSqr(points.at(0) - points.at(2))) - diag, 2);
+    un_squareness += pow(sqrt(lengthSqr(points.at(1) - points.at(3))) - diag, 2);
+
+    un_squareness = sqrt(un_squareness);
+    if (debug > 0)
+        printf("un_sqr: %f\n", un_squareness);
+    if (debug > 2) {
+
+        std::vector<double> sqr_contrib{
+                pow(sqrt(lengthSqr(points.at(0) - points.at(1))) - side, 2),
+                pow(sqrt(lengthSqr(points.at(1) - points.at(2))) - side, 2),
+                pow(sqrt(lengthSqr(points.at(2) - points.at(3))) - side, 2),
+                pow(sqrt(lengthSqr(points.at(3) - points.at(0))) - side, 2),
+                pow(sqrt(lengthSqr(points.at(0) - points.at(2))) - diag, 2),
+                pow(sqrt(lengthSqr(points.at(1) - points.at(3))) - diag, 2),
+        };
+        std::vector<double> lengths {
+            sqrt(lengthSqr(points.at(0) - points.at(1))),
+            sqrt(lengthSqr(points.at(1) - points.at(2))),
+            sqrt(lengthSqr(points.at(2) - points.at(3))),
+            sqrt(lengthSqr(points.at(3) - points.at(0))),
+            sqrt(lengthSqr(points.at(0) - points.at(2))),
+            sqrt(lengthSqr(points.at(1) - points.at(3)))
+        };
+
+        printf("Sqr contribution: ");
+        for (auto contribution : sqr_contrib)
+            printf("%f, ", contribution);
+        printf("\nLengths :");
+        for (auto length : lengths)
+            printf("%f, ", length);
+        printf("\nSide, diag: %f, %f\n", side, diag);
+    };
+
+    return un_squareness < 0.5;
+}
+
+geometry_msgs::PoseWithCovarianceStamped
+getCameraPoseWithCov(const std::vector<cv::Point3f> &depth_corner_points, int debug) {
 
     // Assign the center position and quaternion rotation from the four corner points to the poseWitCovStamped message
     cv::Point3f center; tf2::Quaternion rotation;
     std::tie(center, rotation) = getCenterAndRotation(depth_corner_points);
 
+    geometry_msgs::PoseWithCovarianceStamped ret;
     // Set position and orientation
-    pose_with_cov_stamped.pose.pose.position.x = center.x;
-    pose_with_cov_stamped.pose.pose.position.y = center.y;
-    pose_with_cov_stamped.pose.pose.position.z = center.z;
-    pose_with_cov_stamped.pose.pose.orientation.w = rotation.getW();
-    pose_with_cov_stamped.pose.pose.orientation.x = rotation.getX();
-    pose_with_cov_stamped.pose.pose.orientation.y = rotation.getY();
-    pose_with_cov_stamped.pose.pose.orientation.z = rotation.getZ();
+    ret.pose.pose.position.x = center.x;
+    ret.pose.pose.position.y = center.y;
+    ret.pose.pose.position.z = center.z;
+    ret.pose.pose.orientation.w = rotation.getW();
+    ret.pose.pose.orientation.x = rotation.getX();
+    ret.pose.pose.orientation.y = rotation.getY();
+    ret.pose.pose.orientation.z = rotation.getZ();
 
     // Set covariance
     for (int i{0}; i<6; ++i) {
-        pose_with_cov_stamped.pose.covariance.at(6 * i + i) = -1;
+        ret.pose.covariance.at(6 * i + i) = -1;
     }
 
-    return true;
+    return ret;
 }
-
 

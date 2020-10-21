@@ -32,7 +32,7 @@ cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const 
 
 
 /// Return the points all scaled with a factor "scaling" towards the center (scaling=1 gives only the center point)
-std::vector<cv::Point2f> getScaledTowardsCenter(const std::vector<cv::Point2f>& points, double scaling = 0.1);
+std::vector<cv::Point2f> getScaledTowardsCenter(const std::vector<cv::Point2f>& points, double scaling);
 
 /// Find the n closest points to point with valid depth data
 std::vector<cv::Point3f> getNCloseValidPoints(const cv::Point2f& point, int n, const cv::Mat& depth_image);
@@ -68,9 +68,14 @@ getRotation(const std::vector<cv::Point3f> &ordered_points, int ignore_point_idx
 /// Returns the index of the point with the worst fit to the plane (along z-axis), or -1 if max_off < second_max_off * thresh_factor + thresh_bias
 int worstFitPointIndex(const std::vector<cv::Point3f>& points, float thresh_factor=1, float thresh_bias=0);
 
-bool getCameraPoseWithCov(const cv::Mat &depth_image, const std::vector<cv::Point2f> &corner_points,
-                          const std::vector<double> &depth_camera_info_K, const std::vector<double> &depth_camera_info_D,
-                          geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped, int debug);
+geometry_msgs::PoseWithCovarianceStamped
+getCameraPoseWithCov(const std::vector<cv::Point3f> &depth_corner_points, int debug);
+
+bool checkSquareness(const std::vector<cv::Point3f> &points, double scaling, int debug);
+
+std::vector<cv::Point3f> getInnerCornerPoints(const cv::Mat &depth_image, const std::vector<cv::Point2f> &corner_points,
+                                              const std::vector<double> &depth_camera_info_K_arr,
+                                              const std::vector<double> &depth_camera_info_D, double scaling);
 
 
 #endif //MODULE_POSE_ESTIMATION_DEPTHTOWORLD_H
