@@ -146,8 +146,8 @@ public:
     double cornerPointScore(const Mat &image_in, const std::vector<cv::Point2f> &corners_in);
 
     /// Transform the PoseWithCovStamped to worldspace (with changing metadata)
-    bool transform_to_world(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
-                            const std_msgs::Header &from_header);
+    bool transformToWorld(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
+                          const std_msgs::Header &from_header);
 };
 
 

@@ -59,7 +59,7 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
                              this->depth_camera_info_K_arr, this->depth_camera_info_D,
                              pose_with_cov_stamped, this->debug);
 
-        if (transform_to_world(pose_with_cov_stamped, header_in))
+        if (transformToWorld(pose_with_cov_stamped, header_in))
             this->pose_publisher.publish(pose_with_cov_stamped);
     }
 
@@ -386,8 +386,8 @@ void Pose_extraction::depthCameraInfoCb(const boost::shared_ptr<sensor_msgs::Cam
     this->has_depth_camera_info = true;
 }
 
-bool Pose_extraction::transform_to_world(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
-                                         const std_msgs::Header &from_header) {
+bool Pose_extraction::transformToWorld(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
+                                       const std_msgs::Header &from_header) {
     geometry_msgs::TransformStamped tfGeom;
     try {
         tfGeom = tf_buffer.lookupTransform(this->world_tf_frame_id, from_header.frame_id, from_header.stamp);
