@@ -9,7 +9,7 @@
 	      <param name="itopic_depth_camera_info" value="/d435i/depth/camera_info" />
 		  <param name="world_tf_frame_id" value="t265_odom_frame" />
 
-		  <param name="itopic_detection2D" value="UNDEF" /><!-- TODO: Define -->
+		  <param name="itopic_detection2D" value="/perception/module_bbox_dummy" /><!-- TODO: Use true bbox from YOLO-->
 
 	      <param name="otopic_PoseWithCovarianceStamped" value="/perception/modulePoseWithCovariance" />
 	</node>
@@ -21,12 +21,9 @@
 
 		<param name="itopic_image" value="/d435i/color/image_rect_color" />
 		<param name="itopic_depth_image" value="/d435i/depth_registered/sw_registered/image_rect_raw" />
-		<param name="itopic_depth_camera_info" value="/d435i/depth/camera_info" />
 		<param name="world_tf_frame_id" value="t265_odom_frame" />
 
-		<param name="otopic_detection2D" value="UNDEF" /><!-- TODO: Define -->
-
-		<param name="otopic_PoseWithCovarianceStamped" value="/perception/modulePoseWithCovariance" />
+		<param name="otopic_detection2D" value="/perception/module_bbox_dummy" /><!-- TODO: Define -->
 	</node>
 
 	<node pkg="rosbag" type="play" name="player" args="-l --clock $(find module-pose-estimation-conventional)/bags/skaft_inne_tak.bag"/>
