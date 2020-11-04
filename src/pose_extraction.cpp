@@ -28,6 +28,10 @@ Pose_extraction::~Pose_extraction()
 
 void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg) {
 
+    /// Image pointers
+    cv_bridge::CvImagePtr cv_ptr_bgr;
+    cv_bridge::CvImagePtr cv_ptr_depth;
+
     /// Try to import the images, if it fails: End this call by returning
     if (!importImageDepth(depth_msg, cv_ptr_depth)) {ROS_ERROR("Unable to import depth-image."); return;}
     if (!importImageBgr(bgr_msg, cv_ptr_bgr)) {ROS_ERROR("Unable to import bgr-image."); return;}
@@ -79,7 +83,7 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
             auto stop = boost::chrono::high_resolution_clock::now();
             auto duration = boost::chrono::duration_cast<boost::chrono::milliseconds>(stop - debug_timer_start);
             std::string print_info = duration.count() < 10 ? "imageCb time: 0" : "imageCb time: ";
-            print_info += to_string(duration.count()) + " ms";
+            print_info += std::to_string(duration.count()) + " ms";
             ROS_INFO("%s", print_info.c_str());
         }
         // Update GUI Windows

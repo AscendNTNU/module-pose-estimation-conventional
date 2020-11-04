@@ -14,6 +14,7 @@ add_compile_options(-std=c++17)
 find_package(catkin REQUIRED COMPONENTS
     ascend_msgs
     geometry_msgs
+	vision_msgs
     roscpp
     cv_bridge
     image_transport
@@ -32,7 +33,8 @@ catkin_package(
     CATKIN_DEPENDS
     ascend_msgs
     geometry_msgs
-    roscpp
+	vision_msgs
+	roscpp
 
     tf2_ros
 )
@@ -59,9 +61,11 @@ add_executable(pose_extraction_node
 	src/pose_extraction.cpp
 	src/blue_square_score.cpp
 	src/foreground_extraction.cpp
-		src/depthToWorld.cpp
-	src/drawFunctions.cpp
-	src/cvPointUtilities.cpp)
+	src/depthToWorld.cpp
+        src/utils/drawFunctions.cpp
+        src/utils/cvPointUtilities.cpp
+		)
+
 
 add_dependencies(pose_extraction_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
@@ -71,3 +75,15 @@ target_link_libraries(pose_extraction_node
 #       ${OpenCV_LIBS}
         )
 
+add_executable(bbox_publisher_node
+		src/bbox_publisher/bbox_publisher_node.cpp
+		src/bbox_publisher/Bbox_publisher.cpp src/bbox_publisher/Bbox_publisher.h
+		src/foreground_extraction.cpp
+		)
+add_dependencies(bbox_publisher_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+target_link_libraries(bbox_publisher_node
+		${catkin_LIBRARIES}
+		#	${OpenCV_LIBRARIES}
+		#       ${OpenCV_LIBS}
+		)

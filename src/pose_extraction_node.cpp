@@ -34,6 +34,8 @@ int main(int argc, char** argv) {
     private_nh.param<std::string>("itopic_depth_camera_info", itopic_depth_camera_info, "/d435i/depth/camera_info");
     private_nh.param<std::string>("world_tf_frame_id", world_tf_frame_id, "None");
 
+    private_nh.param<std::string>("itopic_bounding_box", itopic_bounding_box, "None");
+
     private_nh.param<std::string>("otopic_PoseWithCovarianceStamped", otopic_PoseWithCovarianceStamped, "/perception/modulePoseWithCovariance");
 
 

@@ -24,9 +24,9 @@
 
 #include "blue_square_score.h"
 #include "foreground_extraction.h"
-#include "drawFunctions.h"
+#include "utils/drawFunctions.h"
 #include "depthToWorld.h"
-#include "cvPointUtilities.h"
+#include "utils/cvPointUtilities.h"
 
 
 /// Small exception class for throwing "NotImplemented"-errors
@@ -60,8 +60,6 @@ private:
     tf2_ros::TransformListener tf_listener{tf_buffer};   ///< Transform listener
 
     /// Vars for use in functions, (hopefully) improving memory (de/)allocation time
-    cv_bridge::CvImagePtr cv_ptr_bgr;
-    cv_bridge::CvImagePtr cv_ptr_depth;
     cv::Mat smoothed_depth_image;
     cv::Mat depth_mask;
     cv::Mat debug_window;

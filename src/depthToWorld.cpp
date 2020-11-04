@@ -282,7 +282,7 @@ std::vector<cv::Point3f> getInnerCornerPoints(const cv::Mat &depth_image, const 
 }
 
 bool checkSquareness(const std::vector<cv::Point3f> &points, double scaling, int debug) {
-    /// TODO: Figure out why the camera is scaling by 1.6
+    /// TODO: Figure out why the camera is scaling down by 1.6
     // Expected square size parameters in meters
     double side = 1.6 * 0.305 * (1-scaling); // 0.305 m == 1 foot == 12 inches
     double diag = side*1.414;
