@@ -13,6 +13,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <vision_msgs/Detection2D.h>
 
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/calib3d/calib3d.hpp>
@@ -27,6 +28,7 @@
 #include "utils/drawFunctions.h"
 #include "depthToWorld.h"
 #include "utils/cvPointUtilities.h"
+#include "utils/LookupQueue/LookupQueue.h"
 
 
 /// Small exception class for throwing "NotImplemented"-errors
@@ -49,9 +51,6 @@ private:
     ros::NodeHandle nh_;
     /// Image transport for subscription
     image_transport::ImageTransport it_;
-
-    tf2_ros::TransformBroadcaster tf_broadcaster;   ///< Unused broadcasting variable
-    geometry_msgs::TransformStamped tf_pub;         ///< Unused publishing variable
 
     /// Feature detector class. For use with doSiftSwitch
     blueSquareScore BlueSquareScoreCalculator;
@@ -111,6 +110,9 @@ private:
                                               const cv::Rect &inner_bounding_rect,
                                               cv::Rect outer_bounding_rect); // TODO: Add TF to I/O of function
 
+    typedef std::tuple<const sensor_msgs::ImageConstPtr, const sensor_msgs::ImageConstPtr> image_ptr_tuple;
+    LookupQueue<ros::Time, image_ptr_tuple> image_msg_buffer;
+
 
 public:
     // TODO: Make all debug statements check with this debug code (0 meaning no debug)
@@ -123,19 +125,21 @@ public:
 
     void imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg);
 
+    void bboxCb(const vision_msgs::Detection2D& bbox_msg);
+
     // Callback to get depth camera info
     // TODO: Find a way to get this info once without a callback with flag
     void depthCameraInfoCb(const boost::shared_ptr<sensor_msgs::CameraInfo const>& ptr_camera_info_message);
 
     // Depth mask variables
-    int depth_dilation_kernel_size{3}; // 20 is a nice default value for approximately 2m
-    int mask_dilation_kernel_size{3}; // 20 is a nice default value for approximately 2m
-    int depth_mean_offset_value{0}; // 20 is a nice default value for approximately 2m
+    int depth_dilation_kernel_size{3};  // 20 is a nice default value for approximately 2m
+    int mask_dilation_kernel_size{3};  // 20 is a nice default value for approximately 2m
+    int depth_mean_offset_value{0};  // 20 is a nice default value for approximately 2m
 
     // Depth camera info variables. See Pose_exctraction::depthCameraInfoCb and pose_extraction::findPoseAndCov
     bool has_depth_camera_info{false};
     cv::Mat depth_camera_info_K{3, 3, CV_32FC1};  // Camera matrix of depth camera
-    std::vector<double> depth_camera_info_K_arr{0, 0, 0, 0, 0, 0, 0, 0, 0};
+    std::vector<double> depth_camera_info_K_vec{0, 0, 0, 0, 0, 0, 0, 0, 0};
     std::vector<double> depth_camera_info_D;  // Distortion coeffitients of depth camera
 
     std::string world_tf_frame_id;  // frame_id of world frame

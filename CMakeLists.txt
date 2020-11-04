@@ -79,7 +79,7 @@ add_executable(bbox_publisher_node
 		src/bbox_publisher/bbox_publisher_node.cpp
 		src/bbox_publisher/Bbox_publisher.cpp src/bbox_publisher/Bbox_publisher.h
 		src/foreground_extraction.cpp
-		)
+        src/utils/LookupQueue/LookupQueue.cpp src/utils/LookupQueue/LookupQueue.h)
 add_dependencies(bbox_publisher_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(bbox_publisher_node

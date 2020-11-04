@@ -4,7 +4,8 @@
 
 #include "pose_extraction.h"
 
-Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it) : nh_(nh), it_(it), BlueSquareScoreCalculator{}
+Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it)
+            : nh_(nh), it_(it), BlueSquareScoreCalculator{}, image_msg_buffer(60) // TODO: Make buffer size parameter in launch file
 {
     if (this->debug > 0) {
         // Initialize openCV window
@@ -26,7 +27,14 @@ Pose_extraction::~Pose_extraction()
     }
 }
 
+void Pose_extraction::bboxCb(const vision_msgs::Detection2D &bbox_msg) {
+    printf("Got bbox  with seq %d: %d.%d nsec\n", bbox_msg.header.seq, bbox_msg.header.stamp.sec, bbox_msg.header.stamp.nsec);
+    return;
+}
+
 void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg) {
+    printf("Got image with seq %d: %d.%d nsec\n", bgr_msg->header.seq, bgr_msg->header.stamp.sec, bgr_msg->header.stamp.nsec);
+    ros::Time t = bgr_msg->header.stamp;
 
     /// Image pointers
     cv_bridge::CvImagePtr cv_ptr_bgr;
@@ -62,7 +70,7 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
         std::vector<cv::Point3f> inner_corner_points =
                 getInnerCornerPoints(
                         cv_ptr_depth->image, corner_points,
-                        this->depth_camera_info_K_arr, this->depth_camera_info_D,
+                        this->depth_camera_info_K_vec, this->depth_camera_info_D,
                         scaling_towards_center);
 
         if (checkSquareness(inner_corner_points, scaling_towards_center, this->debug)) {
@@ -74,8 +82,6 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
         }
 
     }
-
-
 
     if (this->debug > 0) {
         if (this->debug % 2) {
@@ -392,7 +398,7 @@ void Pose_extraction::depthCameraInfoCb(const boost::shared_ptr<sensor_msgs::Cam
     const boost::array<double, 9> &K = ptr_camera_info_message->K;
     for (int i{0}; i < 9; ++i)
     {
-        this->depth_camera_info_K_arr.at(i) = K.at(i);
+        this->depth_camera_info_K_vec.at(i) = K.at(i);
     }
 
     this->has_depth_camera_info = true;
