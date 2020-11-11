@@ -23,11 +23,13 @@ int main(int argc, char** argv) {
     std::string itopic_image, itopic_depth_image, itopic_bounding_box, itopic_depth_camera_info,
     itopic_model_tf_frame_id, otopic_PoseWithCovarianceStamped, otopic_extracted_tf_frame_id,
     world_tf_frame_id;
-    int depth_dilation_kernel_size, mask_dilation_kernel_size, depth_mean_offset;
+    int depth_dilation_kernel_size, mask_dilation_kernel_size, depth_mean_offset, img_buffer_size, debug;
 
     private_nh.param<int>("depth_mean_offset_value",depth_mean_offset, 0);
     private_nh.param<int>("depth_dilation_kernel_size", depth_dilation_kernel_size, 3);
     private_nh.param<int>("mask_dilation_kernel_size", mask_dilation_kernel_size, 3);
+
+    private_nh.param<int>("img_buffer_size", img_buffer_size, 60);
 
     private_nh.param<std::string>("itopic_image", itopic_image, "/perception/DEFAULT_ITOPIC_IMAGE");  // Get video: "/videofile/image_raw", webcam: /data/ZED_camera
     private_nh.param<std::string>("itopic_depth_image", itopic_depth_image, "/perception/DEFAULT_ITOPIC_DEPTH_IMAGE");  // Get video: "/videofile/image_raw", webcam: /data/ZED_camera
@@ -36,11 +38,14 @@ int main(int argc, char** argv) {
 
     private_nh.param<std::string>("itopic_detection2D", itopic_bounding_box, "ITOPIC_BBOX_DEFAULT");
 
+    private_nh.param<int>("debug", debug, 0);
+
     private_nh.param<std::string>("otopic_PoseWithCovarianceStamped", otopic_PoseWithCovarianceStamped, "/perception/modulePoseWithCovariance");
 
 
     // Set up extractor object and parameters
-    Pose_extraction extractor{nh, it};  // TODO
+    Pose_extraction extractor{nh, it, img_buffer_size};
+    extractor.debug = debug;
     extractor.depth_mean_offset_value = depth_mean_offset;
     extractor.depth_dilation_kernel_size = depth_dilation_kernel_size;
     extractor.mask_dilation_kernel_size = mask_dilation_kernel_size;

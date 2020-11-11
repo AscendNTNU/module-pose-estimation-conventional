@@ -4,10 +4,9 @@
 
 #include "Bbox_publisher.h"
 
-Bbox_publisher::Bbox_publisher(ros::NodeHandle &nh, image_transport::ImageTransport &it) : nh_(nh), it_(it) {}
+Bbox_publisher::Bbox_publisher(ros::NodeHandle &nh, image_transport::ImageTransport &it) : nh_(nh), it_(it), debug{0} {}
 
 void Bbox_publisher::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg) {
-
     /// Image pointers
     cv_bridge::CvImagePtr cv_ptr_bgr;
     cv_bridge::CvImagePtr cv_ptr_depth;

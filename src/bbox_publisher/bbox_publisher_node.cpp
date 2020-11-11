@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     /// Initialize subscriber/publisher adress parameters, retrieve params
     ros::NodeHandle private_nh("~");
     std::string itopic_image, itopic_depth_image, otopic_detection2D;
-    int depth_dilation_kernel_size, mask_dilation_kernel_size, depth_mean_offset;
+    int depth_dilation_kernel_size, mask_dilation_kernel_size, depth_mean_offset, debug;
 
     private_nh.param<int>("depth_mean_offset_value",depth_mean_offset, 0);
     private_nh.param<int>("depth_dilation_kernel_size", depth_dilation_kernel_size, 3);
@@ -32,9 +32,11 @@ int main(int argc, char** argv) {
 
     private_nh.param<std::string>("otopic_detection2D", otopic_detection2D, "/perception/bbox_dummy");
 
+    private_nh.param<int>("debug", debug, 0);
 
     // Set up extractor object and parameters
     Bbox_publisher bboxPublisher{nh, it};  // TODO
+    bboxPublisher.debug = debug;
     bboxPublisher.depth_mean_offset_value = depth_mean_offset;
     bboxPublisher.depth_dilation_kernel_size = depth_dilation_kernel_size;
     bboxPublisher.mask_dilation_kernel_size = mask_dilation_kernel_size;

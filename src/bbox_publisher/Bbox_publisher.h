@@ -23,7 +23,7 @@ private:
 
     void publishDetection(const cv::Rect &bounding_rect, const std_msgs::Header &header);
 public:
-    int debug{0};
+    int debug;
     Bbox_publisher(ros::NodeHandle &nh, image_transport::ImageTransport &it);
 
     void imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg);

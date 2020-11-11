@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <cstdio>
+#include <stdexcept>
 
 template <class ID, class T>
 class LookupQueue {
@@ -18,31 +19,35 @@ private:
 public:
     explicit LookupQueue(unsigned int max_size);
 
-    void push_back(const ID& id, const T& elem);
-    [[nodiscard]] int size() const {return start <= end ? end - start : end - start + max_size;}
+    void push_elem(const ID& id, const T& elem);
+    [[nodiscard]] int buffer_size() const {return start <= end ? end - start : end - start + max_size;}
     bool lookupById(const ID& id, T& ret_elem) const;
 };
 
 template<class ID, class T>
-void LookupQueue<ID, T>::push_back(const ID &id, const T &elem) {
-    int size_ = size();
-    if (size() == max_size)
+void LookupQueue<ID, T>::push_elem(const ID &id, const T &elem) {
+
+    if (this->buffer_size() == max_size) {
         remove_front();
-    
+    }
+
+    if (end >= max_size)
+        end = 0;
+
     container.at(end) = std::pair<ID, T>(id, elem);
 
     end += 1;
-    if (end > max_size)
-        end = 0;
 }
 
 template<class ID, class T>
-LookupQueue<ID, T>::LookupQueue(unsigned int max_size) : max_size{max_size} {
+LookupQueue<ID, T>::LookupQueue(unsigned int max_size) : max_size(max_size) {
+    container = std::vector<std::pair<ID, T>>(this->max_size);
 };
 
 template<class ID, class T>
 void LookupQueue<ID, T>::remove_front() {
-    static_assert(size() > 1, "Tried to remove element from empty queue. Check max_size>0.");
+    if (buffer_size() < 1)
+        throw std::logic_error("Tried to remove element from empty queue. Check max_size > 0.");
     start += 1;
     if (start == max_size)
         start = 0;
@@ -51,9 +56,9 @@ void LookupQueue<ID, T>::remove_front() {
 
 template<class ID, class T>
 bool LookupQueue<ID, T>::lookupById(const ID &id, T& ret_elem) const {
-    for (const T& elem: container) {
-        if (elem == id) {
-            ret_elem = elem;
+    for (const std::pair<ID, T>& elem: container) {
+        if (elem.first == id) {
+            ret_elem = elem.second;
             return true;
         }
     }

@@ -4,19 +4,17 @@
 
 #include "pose_extraction.h"
 
-Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it)
-            : nh_(nh), it_(it), BlueSquareScoreCalculator{}, image_msg_buffer(60) // TODO: Make buffer size parameter in launch file
+Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it, int img_buffer_size)
+            : nh_(nh), it_(it), BlueSquareScoreCalculator{}, image_ptr_buffer(img_buffer_size), debug{0}// TODO: Make buffer size parameter in launch file
 {
     if (this->debug > 0) {
         // Initialize openCV window
         cv::namedWindow(INPUT_WINDOW);
         moveWindow(INPUT_WINDOW, 10, 10);
-        cv::namedWindow(RESULT_WINDOW);
-        moveWindow(RESULT_WINDOW, 720, 10);
-        // cv::namedWindow(DEPTH_WINDOW);
-        // moveWindow(DEPTH_WINDOW, 10,540);
-        // cv::namedWindow(DEPTH_MASK_WINDOW);
-        // moveWindow(DEPTH_MASK_WINDOW, 720,540);
+        cv::namedWindow(DEBUG_WINDOW);
+        moveWindow(DEBUG_WINDOW, 10,540);
+        cv::namedWindow(DEBUG_WINDOW2);
+        moveWindow(DEBUG_WINDOW, 10,540);
     }
 }
 
@@ -28,12 +26,46 @@ Pose_extraction::~Pose_extraction()
 }
 
 void Pose_extraction::bboxCb(const vision_msgs::Detection2D &bbox_msg) {
-    printf("Got bbox  with seq %d: %d.%d nsec\n", bbox_msg.header.seq, bbox_msg.header.stamp.sec, bbox_msg.header.stamp.nsec);
-    return;
+    if (debug % 2 == 1 && debug >= 3)
+        printf("Got bbox  with seq %d: %d.%d nsec:  ", bbox_msg.header.seq, bbox_msg.header.stamp.sec, bbox_msg.header.stamp.nsec);
+
+    cv::Rect bbox;
+    if (!importBboxRect(bbox_msg, bbox)) {
+        printf("Failed to import\n");
+        return;
+    }
+
+    /// Get images saved by imageCb
+    image_ptr_tuple images;
+    if (!image_ptr_buffer.lookupById(bbox_msg.header.stamp, images)) {
+        if (debug % 2 == 1)
+            printf("Warning: Did not find image in lookupByID. Consider increasing buffer size.\n");
+        return;
+    };
+
+    auto [cv_ptr_bgr, cv_ptr_depth] = images;
+
+    auto [success, module_world_pose] = getWorldPose(cv_ptr_bgr->image, cv_ptr_depth->image, bbox);
+
+    if (success) {
+        this->pose_publisher.publish(module_world_pose);
+    }
+
+    if (this->debug > 0) {
+        // Update GUI Windows
+        if (!this->debug_window.empty() and success)
+            cv::imshow(DEBUG_WINDOW, this->debug_window);
+        cv::waitKey(1);
+    };
+    if (debug % 2 == 1 && debug >= 3) {
+        if (success) printf("    Published pose\n");
+        else printf("Failed to get world pose\n");
+    }
 }
 
 void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg) {
-    printf("Got image with seq %d: %d.%d nsec\n", bgr_msg->header.seq, bgr_msg->header.stamp.sec, bgr_msg->header.stamp.nsec);
+    if (debug % 2 == 1 && debug >= 3)
+        printf("Got image with seq %d: %d.%d nsec:  ", bgr_msg->header.seq, bgr_msg->header.stamp.sec, bgr_msg->header.stamp.nsec);
     ros::Time t = bgr_msg->header.stamp;
 
     /// Image pointers
@@ -41,65 +73,52 @@ void Pose_extraction::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const s
     cv_bridge::CvImagePtr cv_ptr_depth;
 
     /// Try to import the images, if it fails: End this call by returning
-    if (!importImageDepth(depth_msg, cv_ptr_depth)) {ROS_ERROR("Unable to import depth-image."); return;}
     if (!importImageBgr(bgr_msg, cv_ptr_bgr)) {ROS_ERROR("Unable to import bgr-image."); return;}
+    if (!importImageDepth(depth_msg, cv_ptr_depth)) {ROS_ERROR("Unable to import depth-image."); return;}
     std_msgs::Header header_in{bgr_msg->header};
 
-    auto debug_timer_start = boost::chrono::high_resolution_clock::now();  // Timer
+    /// Save to lookupqueue buffer for retrieval in bboxCb
+    image_ptr_tuple images{
+            cv_ptr_bgr, cv_ptr_depth
+            };
 
-    /// Create depth mask thresholding away the background
-    smoothed_depth_image = dilate_depth_image(cv_ptr_depth->image, this->depth_dilation_kernel_size);
+    image_ptr_buffer.push_elem(bgr_msg->header.stamp, images);
+}
+
+std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped>
+Pose_extraction::getWorldPose(const Mat &bgr_image, const Mat &depth_image, const Rect &bounding_box) {
+
+    auto ret = geometry_msgs::PoseWithCovarianceStamped{};
+
+    smoothed_depth_image = dilate_depth_image(depth_image, this->depth_dilation_kernel_size);
     depth_mask = generate_foreground_mask(smoothed_depth_image, this->depth_mean_offset_value, this->mask_dilation_kernel_size);
 
     /// Find the blue parts of the image:
     cv::Mat blueness_image;
-    bluenessImageMasked(cv_ptr_bgr->image, blueness_image, depth_mask, true);
-
-    /// Find a rectangle in which the blue square *at least* lies within
-    auto [inner_bounding_rectangle, outer_bounding_rectangle] =
-            getBoundingRectangle(blueness_image);
-    if (inner_bounding_rectangle == cv::Rect{0, 0, 0, 0})
-        return; // Return when no rectangle is found
+    bluenessImageMasked(bgr_image, blueness_image, depth_mask, true);
 
     /// Find the corner points in the blueness image
-    std::vector<cv::Point2f> corner_points =
-            findCornerPoints(cv_ptr_bgr->image, blueness_image, inner_bounding_rectangle, outer_bounding_rectangle);
+    std::vector<cv::Point2f> corner_points;
+    corner_points = findCornerPoints(bgr_image, blueness_image, bounding_box);
 
     if (!corner_points.empty() && this->has_depth_camera_info) {
         double scaling_towards_center{0.2};
         std::vector<cv::Point3f> inner_corner_points =
                 getInnerCornerPoints(
-                        cv_ptr_depth->image, corner_points,
+                        depth_image, corner_points,
                         this->depth_camera_info_K_vec, this->depth_camera_info_D,
                         scaling_towards_center);
 
         if (checkSquareness(inner_corner_points, scaling_towards_center, this->debug)) {
-
-            geometry_msgs::PoseWithCovarianceStamped pose_with_cov_stamped =
-                    getCameraPoseWithCov(inner_corner_points, this->debug);
-            if (transformToWorld(pose_with_cov_stamped, header_in))
-                this->pose_publisher.publish(pose_with_cov_stamped);
+            ret = getCameraPoseWithCov(inner_corner_points, this->debug);
+            return std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped>(true, ret);
         }
-
     }
 
-    if (this->debug > 0) {
-        if (this->debug % 2) {
-            // Timer endpoint and print
-            auto stop = boost::chrono::high_resolution_clock::now();
-            auto duration = boost::chrono::duration_cast<boost::chrono::milliseconds>(stop - debug_timer_start);
-            std::string print_info = duration.count() < 10 ? "imageCb time: 0" : "imageCb time: ";
-            print_info += std::to_string(duration.count()) + " ms";
-            ROS_INFO("%s", print_info.c_str());
-        }
-        // Update GUI Windows
-        cv::imshow(INPUT_WINDOW, cv_ptr_bgr->image);
-        cv::imshow(RESULT_WINDOW, blueness_image);
-        // cv::imshow(DEPTH_WINDOW, smoothed_depth_image);
-        // cv::imshow(DEPTH_MASK_WINDOW, depth_mask);
-        cv::waitKey(1);
-    }
+    return std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped>(false, ret);
 }
+
+
 
 bool Pose_extraction::importImageBgr(const sensor_msgs::ImageConstPtr &msg, cv_bridge::CvImagePtr &cv_ptr_out)
 {
@@ -136,6 +155,18 @@ bool Pose_extraction::importImageDepth(const sensor_msgs::ImageConstPtr &msg, cv
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return false;
     }
+};
+
+bool Pose_extraction::importBboxRect(const vision_msgs::Detection2D &bbox_msg, cv::Rect& rect_out) {
+    double center_x{bbox_msg.bbox.center.x}, center_y{bbox_msg.bbox.center.y};
+    double w{bbox_msg.bbox.size_x}, h{bbox_msg.bbox.size_y};
+
+    rect_out.x = std::round(center_x - w/2);
+    rect_out.y = std::round(center_y - h/2);
+    rect_out.height = std::round(h);
+    rect_out.width = std::round(w);
+
+    return true;
 };
 
 std::tuple<cv::Rect, cv::Rect> Pose_extraction::getBoundingRectangle(const cv::Mat &blueness_image)
@@ -199,8 +230,21 @@ std::tuple<cv::Rect, cv::Rect> Pose_extraction::getBoundingRectangle(const cv::M
     return {bounding_rect, outer_bounding_rect};
 
 }
+std::vector<cv::Point2f> Pose_extraction::findCornerPoints(const Mat &cv_color_image, const cv::Mat &blueness_image,
+                                                           const cv::Rect &inner_bounding_rect) {
+    static constexpr double scaling = 0.2;  // Tweak
+    int x{inner_bounding_rect.x}, y{inner_bounding_rect.y}, h{inner_bounding_rect.height}, w{inner_bounding_rect.width};
+    cv::Rect outer_bounding_rect;
+    outer_bounding_rect.x = x - scaling * w;
+    outer_bounding_rect.y = y - scaling * h;
+    outer_bounding_rect.width = w * (1 + 2*scaling);
+    outer_bounding_rect.height = h * (1 + 2*scaling);
 
-std::vector<cv::Point2f> Pose_extraction::findCornerPoints(Mat &cv_color_image, const cv::Mat &blueness_image,
+    return findCornerPoints(cv_color_image, blueness_image, inner_bounding_rect, outer_bounding_rect);
+}
+
+
+std::vector<cv::Point2f> Pose_extraction::findCornerPoints(const Mat &cv_color_image, const cv::Mat &blueness_image,
                                                            const cv::Rect &inner_bounding_rect,
                                                            cv::Rect outer_bounding_rect)
 {
@@ -319,38 +363,26 @@ std::vector<cv::Point2f> Pose_extraction::findCornerPoints(Mat &cv_color_image, 
 
     if (this->debug > 0)
     {
-        if (score > 0.2)
-            drawCycle(cv_color_image, hull_approx, cv::Point2i{outer_bounding_rect.x, outer_bounding_rect.y},
+        // Draw bounding rectangles and convex hull on debug window
+        cv_color_image.copyTo(this->debug_window);
+        cv::rectangle(this->debug_window, inner_bounding_rect,
+                      cv::Scalar{0, 256, 0});
+        cv::rectangle(this->debug_window, outer_bounding_rect,
+                      cv::Scalar{0, 0, 256});
+        if (score > 0.2) {
+            drawCycle(this->debug_window, hull_approx, cv::Point2i{outer_bounding_rect.x, outer_bounding_rect.y},
                       cv::Scalar{128, 0, 256}, true);
-        else
-            drawCycle(cv_color_image, hull_approx, cv::Point2i{outer_bounding_rect.x, outer_bounding_rect.y},
+        }
+        else {
+            drawCycle(this->debug_window, hull_approx, cv::Point2i{outer_bounding_rect.x, outer_bounding_rect.y},
                       cv::Scalar{0, 128, 256}, true);
+        }
     }
     if (score > 0.2)
         return hull_approx + offset;
     else
         return std::vector<cv::Point2f>{};
 };
-
-void Pose_extraction::getInnerBoundingRectangle(const cv::Rect &bounding_rect, std::vector<cv::Point2f> &points_out)
-{
-
-    // Simply put the bounding box initial variables in the points_found
-    // Do the inverse of the bounding-rectangle transform in houghLinesIntersection
-    int x = bounding_rect.x;
-    int y = bounding_rect.y;
-    int w = bounding_rect.width;
-    int h = bounding_rect.height;
-
-    w = w / 2;
-    h = h - w;
-    x = x + w / 2;
-    y = y + w / 2; // New version as of 2020-03-03
-    points_out.emplace_back(cv::Vec2i(x, y));
-    points_out.emplace_back(cv::Vec2i(x + w, y));
-    points_out.emplace_back(cv::Vec2i(x + w, y + h));
-    points_out.emplace_back(cv::Vec2i(x, y + h));
-}
 
 double Pose_extraction::cornerPointScore(const Mat &image_in, const std::vector<cv::Point2f> &corners_in)
 {
@@ -524,6 +556,7 @@ void bluenessImageMasked(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, const c
     /// Apply the mask:
     cv::bitwise_and(im_grey_out, depth_mask, im_grey_out);
 
+
     /// And blur afterwards
     if (blur)
         cv::GaussianBlur(im_grey_out, im_grey_out, cv::Size(17, 17), 3, 3);
@@ -675,4 +708,9 @@ std::string matType2str(int type)
     r += (chans + '0');
 
     return r;
+}
+
+std::ostream& operator<<(std::ostream& os, const cv::Rect& r) {
+    os << "(" << r.x << ", " << r.y << ", " << r.width << ", " << r.width << ")";
+    return os;
 }

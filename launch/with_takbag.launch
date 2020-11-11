@@ -1,17 +1,21 @@
 <launch>
 	<node pkg="module-pose-estimation-conventional" type="pose_extraction_node" name="pose_extraction_node" output="screen">
-	      <param name="depth_mean_offset_value" value="-2" />
-	      <param name="mask_dilation_kernel_size" value="3" />
-	      <param name="depth_dilation_kernel_size" value="3" />
+	    <param name="depth_mean_offset_value" value="-2" />
+	    <param name="mask_dilation_kernel_size" value="3" />
+	    <param name="depth_dilation_kernel_size" value="3" />
 
-	      <param name="itopic_image" value="/d435i/color/image_rect_color" />
-          <param name="itopic_depth_image" value="/d435i/depth_registered/sw_registered/image_rect_raw" />
-	      <param name="itopic_depth_camera_info" value="/d435i/depth/camera_info" />
-		  <param name="world_tf_frame_id" value="t265_odom_frame" />
+		<param name="img_buffer_size" value="60" />
 
-		  <param name="itopic_detection2D" value="/perception/module_bbox_dummy" /><!-- TODO: Use true bbox from YOLO-->
+		<param name="itopic_image" value="/d435i/color/image_rect_color" />
+        <param name="itopic_depth_image" value="/d435i/depth_registered/sw_registered/image_rect_raw" />
+	    <param name="itopic_depth_camera_info" value="/d435i/depth/camera_info" />
+		<param name="world_tf_frame_id" value="t265_odom_frame" />
 
-	      <param name="otopic_PoseWithCovarianceStamped" value="/perception/modulePoseWithCovariance" />
+		<param name="itopic_detection2D" value="/perception/module_bbox_dummy" /><!-- TODO: Use true bbox from YOLO-->
+
+	    <param name="otopic_PoseWithCovarianceStamped" value="/perception/modulePoseWithCovariance" />
+
+		<param name="debug" value="0" />
 	</node>
 
 	<node pkg="module-pose-estimation-conventional" type="bbox_publisher_node" name="bbox_publisher" output="screen">
@@ -24,6 +28,8 @@
 		<param name="world_tf_frame_id" value="t265_odom_frame" />
 
 		<param name="otopic_detection2D" value="/perception/module_bbox_dummy" /><!-- TODO: Define -->
+
+		<param name="debug" value="0" />
 	</node>
 
 	<node pkg="rosbag" type="play" name="player" args="-l --clock $(find module-pose-estimation-conventional)/bags/skaft_inne_tak.bag"/>

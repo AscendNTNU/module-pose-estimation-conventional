@@ -39,9 +39,8 @@ public:
 };
 
 static const std::string INPUT_WINDOW = "Image window";     ///< Debug window name
-static const std::string RESULT_WINDOW = "Blueness window";   ///< Debug window name
-static const std::string DEPTH_WINDOW = "Canny on blue window";     ///< Debug window name
-static const std::string DEPTH_MASK_WINDOW = "Depth mask window";   ///< Debug window name
+static const std::string DEBUG_WINDOW = "Debug window";     ///< Debug window name
+static const std::string DEBUG_WINDOW2 = "Debug2 window";   ///< Debug window name
 
 
 // The overall object managing the Pose_extraction process
@@ -71,6 +70,13 @@ private:
     static bool importImageBgr(const sensor_msgs::ImageConstPtr &msg, cv_bridge::CvImagePtr& cv_ptr_out);
     /// Try to import the image given by the message. If it fails: return false
     static bool importImageDepth(const sensor_msgs::ImageConstPtr &msg, cv_bridge::CvImagePtr& ptr_out);
+    /// Try to transform bbox detection to cv::Rect. If it fails: return false
+    bool importBboxRect(const vision_msgs::Detection2D &bbox_msg, Rect &rect_out);
+
+
+    // Core function finding pose
+    std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped> getWorldPose(const Mat &bgr_image, const cv::Mat& depth_image,
+                                                                            const cv::Rect& bounding_box);
 
     /**
      * @brief Find an outer bounding box that will at least contain the blue plate.
@@ -106,19 +112,24 @@ private:
      * @param[in] outer_bounding_rect: The bounding rectangle from getBoundingRectangle in which the box lies.
      * @returns bool: Whether the score of "cornerPointScore" is high enough for the result to be valid
      */
-    std::vector<cv::Point2f> findCornerPoints(Mat &cv_color_image, const cv::Mat &blueness_image,
+    std::vector<cv::Point2f> findCornerPoints(const Mat &cv_color_image, const cv::Mat &blueness_image,
                                               const cv::Rect &inner_bounding_rect,
-                                              cv::Rect outer_bounding_rect); // TODO: Add TF to I/O of function
+                                              cv::Rect outer_bounding_rect);
 
-    typedef std::tuple<const sensor_msgs::ImageConstPtr, const sensor_msgs::ImageConstPtr> image_ptr_tuple;
-    LookupQueue<ros::Time, image_ptr_tuple> image_msg_buffer;
+    std::vector<cv::Point2f> findCornerPoints(const Mat &cv_color_image, const cv::Mat &blueness_image,
+                                              const cv::Rect &inner_bounding_rect);
+
+
+
+    typedef std::pair<cv_bridge::CvImagePtr, cv_bridge::CvImagePtr> image_ptr_tuple;
+    LookupQueue<ros::Time, image_ptr_tuple> image_ptr_buffer;
 
 
 public:
     // TODO: Make all debug statements check with this debug code (0 meaning no debug)
-    int debug{0};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps
+    int debug{1};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps
 
-    Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it);
+    Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it, int img_buffer_size);
     ~Pose_extraction();
 
     ros::Publisher pose_publisher;  ///< Object specific publisher variable
@@ -149,6 +160,7 @@ public:
     /// Transform the PoseWithCovStamped to worldspace (with changing metadata)
     bool transformToWorld(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
                           const std_msgs::Header &from_header);
+
 };
 
 
@@ -243,5 +255,7 @@ std::string matType2str(int type);  // Debugging tool
 
 /// Make sure the cropping rectangle rect is within the constraints of an image with im_width and im_height
 cv::Rect limitOuterCroppingRectangle(cv::Rect rect, const cv::Rect &inner_rect, const int &im_width, const int &im_height);
+
+std::ostream& operator<<(std::ostream& os, const cv::Rect& r);
 
 #endif //MODULE_POSE_ESTIMATION_POSE_EXTRACTION_H
