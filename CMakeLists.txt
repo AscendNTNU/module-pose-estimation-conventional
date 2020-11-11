@@ -60,11 +60,11 @@ add_executable(pose_extraction_node
 	src/pose_extraction_node.cpp
 	src/pose_extraction.cpp
 	src/blue_square_score.cpp
-	src/foreground_extraction.cpp
-	src/depthToWorld.cpp
+		src/utils/foreground_extraction.cpp
+        src/utils/depthToWorld.cpp
         src/utils/drawFunctions.cpp
         src/utils/cvPointUtilities.cpp
-		)
+        src/utils/lineUtils.cpp src/utils/lineUtils.h)
 
 
 add_dependencies(pose_extraction_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -78,8 +78,8 @@ target_link_libraries(pose_extraction_node
 add_executable(bbox_publisher_node
 		src/bbox_publisher/bbox_publisher_node.cpp
 		src/bbox_publisher/Bbox_publisher.cpp src/bbox_publisher/Bbox_publisher.h
-		src/foreground_extraction.cpp
-        src/utils/LookupQueue/LookupQueue.cpp src/utils/LookupQueue/LookupQueue.h)
+		src/utils/foreground_extraction.cpp
+        src/utils/LookupQueue/LookupQueue.cpp src/utils/LookupQueue/LookupQueue.h src/utils/lineUtils.cpp src/utils/lineUtils.h)
 add_dependencies(bbox_publisher_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(bbox_publisher_node

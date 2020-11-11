@@ -12,7 +12,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
-#include "utils/cvPointUtilities.h"
+#include "cvPointUtilities.h"
 
 enum class GridpointDirection{y_neg, y_pos, x_neg_y_neg, x_neg_y_pos, x_pos_y_neg, x_pos_y_pos};
 

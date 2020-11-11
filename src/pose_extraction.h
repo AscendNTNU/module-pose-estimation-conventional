@@ -24,11 +24,12 @@
 #include <message_filters/sync_policies/approximate_time.h>
 
 #include "blue_square_score.h"
-#include "foreground_extraction.h"
+#include "utils/foreground_extraction.h"
 #include "utils/drawFunctions.h"
-#include "depthToWorld.h"
+#include "utils/depthToWorld.h"
 #include "utils/cvPointUtilities.h"
 #include "utils/LookupQueue/LookupQueue.h"
+#include "utils/lineUtils.h"
 
 
 /// Small exception class for throwing "NotImplemented"-errors
@@ -62,44 +63,17 @@ private:
     cv::Mat depth_mask;
     cv::Mat debug_window;
 
-    /// Image to work on, maybe saving some memory (de)alloccation time.
-    cv::Mat cv_work_image;
-
-
     /// Try to import the image given by the message. If it fails: return false
     static bool importImageBgr(const sensor_msgs::ImageConstPtr &msg, cv_bridge::CvImagePtr& cv_ptr_out);
     /// Try to import the image given by the message. If it fails: return false
     static bool importImageDepth(const sensor_msgs::ImageConstPtr &msg, cv_bridge::CvImagePtr& ptr_out);
     /// Try to transform bbox detection to cv::Rect. If it fails: return false
-    bool importBboxRect(const vision_msgs::Detection2D &bbox_msg, Rect &rect_out);
+    static bool importBboxRect(const vision_msgs::Detection2D &bbox_msg, Rect &rect_out);
 
 
     // Core function finding pose
     std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped> getWorldPose(const Mat &bgr_image, const cv::Mat& depth_image,
                                                                             const cv::Rect& bounding_box);
-
-    /**
-     * @brief Find an outer bounding box that will at least contain the blue plate.
-     *
-     * The task is in essence to crop the image to a smaller area. This is so that Torleifs sift/orb feature detector
-     * can work quickly on a smaller part of the image, and to work as a "narrowing down" algorithm to work further
-     * on the image cropped by the bounding rectangle.
-     *
-     * @param[in] cv_im_draw_on: The input image in which to determine where the blue square is.
-     * @param[out] blueness_image: A copy of the cv_ptr_in.image, made to be modified and worked on. Should return the image from bluenessImageMasked
-     * @param[out] bounding_rectangle: The bounding rectangle in which the blue square lies. Returns cv::Rect{0, 0, 0, 0} when nothing is found.
-     */
-    std::tuple<cv::Rect, cv::Rect>
-    getBoundingRectangle(const cv::Mat &blueness_image); //TODO: Add const to input
-
-
-    /**
-     * @brief A function that chooses the different sift/orb/featuredetection methods (or none of them)
-     *
-     * @param[out] points_out: A vector of points corresponding to the corners of the inner bounding rectangle.
-     * @param[in] bounding_rect: The bounding rectangle in which the blue square is. Used for cropping later.
-     */
-    void getInnerBoundingRectangle(const cv::Rect &bounding_rect, std::vector<cv::Point2f> &points_out);
 
     /**
      * @brief Return cornerpoints of the square in camera pixels
@@ -124,22 +98,28 @@ private:
     typedef std::pair<cv_bridge::CvImagePtr, cv_bridge::CvImagePtr> image_ptr_tuple;
     LookupQueue<ros::Time, image_ptr_tuple> image_ptr_buffer;
 
+    double cornerPointScore(const Mat &image_in, const std::vector<cv::Point2f> &corners_in);
+
+    /// Transform the PoseWithCovStamped to worldspace (with changing metadata)
+    bool transformToWorld(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
+                          const std_msgs::Header &from_header);
+
 
 public:
-    // TODO: Make all debug statements check with this debug code (0 meaning no debug)
-    int debug{1};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps
+    int debug{0};  ///< Whether to use debug mode (>= 1). Odd numbers will print timestamps. See launc file
 
     Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it, int img_buffer_size);
     ~Pose_extraction();
 
-    ros::Publisher pose_publisher;  ///< Object specific publisher variable
+    ros::Publisher pose_publisher;  ///< Publisher variable
 
+    // Callback on images (saving images in image_msg_buffer)
     void imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg);
 
+    // Callback on bounding box
     void bboxCb(const vision_msgs::Detection2D& bbox_msg);
 
     // Callback to get depth camera info
-    // TODO: Find a way to get this info once without a callback with flag
     void depthCameraInfoCb(const boost::shared_ptr<sensor_msgs::CameraInfo const>& ptr_camera_info_message);
 
     // Depth mask variables
@@ -154,13 +134,6 @@ public:
     std::vector<double> depth_camera_info_D;  // Distortion coeffitients of depth camera
 
     std::string world_tf_frame_id;  // frame_id of world frame
-
-    double cornerPointScore(const Mat &image_in, const std::vector<cv::Point2f> &corners_in);
-
-    /// Transform the PoseWithCovStamped to worldspace (with changing metadata)
-    bool transformToWorld(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
-                          const std_msgs::Header &from_header);
-
 };
 
 
@@ -193,69 +166,5 @@ void bluenessImageMasked(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, const c
  * @param[in] blur: Whether to blur the result before returning. default: true
  */
 void bluenessImage(const cv::Mat &im_in_bgr, cv::Mat &im_grey_out, const bool &blur);
-
-//TODO: Move these tools to another .h/.cpp file
-/**
- * @brief Check whether the angle between two lines is smaller than minTheta
- *
- * Returns true if the angle is bigger, false if they are too parallel.
- *
- *
- * @param[in] line1, line2: The two lines for angle comparison
- * @param[in] minTheta: Minimum angle for acceptance
- * @returns bool: true if the angle between lines is sufficiently large, false if they are too parallel
- */
-bool acceptLinePair(const cv::Vec2f& line1, const cv::Vec2f& line2, const float& minTheta);
-
-/**
- * @brief Computes the intersection of all the lines defines by an angle and a radius, with a minimum angle difference between lines.
- *
- * @see acceptLinePair
- * @see computeIntersect
- * @see Pose_extractor::drawPoints
- *
- * @param[in] lines: The lines that one shall compute the intersection of, on the form [radius, angle]
- * @param[in] offset: Give an offset to the line intersect coordinates
- * @returns intersections: The intersection points of all the lines
- */
-std::vector<cv::Point2f>
-computeMultiIntersections(const std::vector<cv::Vec2f> &lines, const float &minAngleDiff,
-                          const cv::Point2f& offset=cv::Point2f{0, 0}, const int &max_intersects = -1);
-
-/**
- * @brief Computes the intersection of two lines defined by an angle and radius.
- *
- * @see computeMultiIntersections
- *
- * @param[in] line1, line2: The lines that one shall compute the intersection of
- * @param[in] offset: Give an offset to the line intersect coordinates
- * @returns intersection: The intersection point of the two lines
- *
- */
-cv::Point2f computeIntersect(const cv::Vec2f &line1, const cv::Vec2f &line2, const cv::Point2f& offset=cv::Point2f{0, 0});
-
-/**
- * @brief Get a point pair from the line defined by an angle and a radius
- *
- * @param[in] line: Line to find points for
- * @returns vector with two points defining the line.
- */
-std::vector<cv::Point2f> lineToPointPair(const cv::Vec2f& line);
-
-/**
- * @brief Get a vector of radius and angle from a vector of lines defined by two points.
- *
- * @param[in] lines_points_in: Vector of 4-point vectors defining a line
- * @returns lines_out: vector of 2-point vector definint the radii and angles of the lines.
- */
-void linepointsToRadiusAngle(const std::vector<cv::Vec4i>& lines_points_in, std::vector<cv::Vec2f>& lines_out);
-
-/// Return a string with the type of the matrix. Input cv::Mat.type()
-std::string matType2str(int type);  // Debugging tool
-
-/// Make sure the cropping rectangle rect is within the constraints of an image with im_width and im_height
-cv::Rect limitOuterCroppingRectangle(cv::Rect rect, const cv::Rect &inner_rect, const int &im_width, const int &im_height);
-
-std::ostream& operator<<(std::ostream& os, const cv::Rect& r);
 
 #endif //MODULE_POSE_ESTIMATION_POSE_EXTRACTION_H

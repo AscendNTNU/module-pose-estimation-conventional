@@ -11,7 +11,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include <vision_msgs/Detection2D.h>
 
-#include "../foreground_extraction.h"
+#include "../utils/foreground_extraction.h"
 
 class Bbox_publisher {
 private:
