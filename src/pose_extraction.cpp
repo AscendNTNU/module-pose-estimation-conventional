@@ -333,20 +333,11 @@ double Pose_extraction::cornerPointScore(const Mat &image_in, const std::vector<
         dst_quad[i] = corners_in[i];
     }
 
-    auto debug_start_bss = boost::chrono::high_resolution_clock::now();
-
     double res;
     res = BlueSquareScoreCalculator.getBlueSquareScore(image_in, dst_quad);
 
     if (this->debug > 0) {
         std::cout << "BSS result: " << res << "\n";
-        if (this->debug % 2) {
-            auto stop_bss = boost::chrono::high_resolution_clock::now();
-            auto duration_bss = boost::chrono::duration_cast<boost::chrono::milliseconds>(stop_bss - debug_start_bss);
-            std::string print_info = duration_bss.count() < 10 ? "BSS_Function time: 0" : "BSS_Function time: ";
-            print_info += to_string(duration_bss.count()) + " ms";
-            ROS_INFO("%s", print_info.c_str());
-        }
     }
 
     return res;
