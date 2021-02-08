@@ -33,6 +33,7 @@ cv::Point3f findXYZ(const cv::Point2f &point, const cv::Mat &depth_image, const 
     const auto& fy = depth_camera_info_K_arr.at(4);
 
 
+    // TODO(marius): Update to new non-rectified but not spotty depth image.
     std::vector<cv::Point3f> valid_close_points = getNCloseValidPoints(point, 6, depth_image);
     // Find the center of these points and the gradient of the fitted plane
     // TODO: Could add a check that no valid close points are at distance greater than set distance threshold in imageCb
@@ -282,7 +283,7 @@ std::vector<cv::Point3f> getInnerCornerPoints(const cv::Mat &depth_image, const 
 }
 
 bool checkSquareness(const std::vector<cv::Point3f> &points, double scaling, int debug) {
-    /// TODO: Figure out why the camera is scaling down by 1.6
+    /// TODO(marius): Figure out why the camera is scaling down by 1.6
     // Expected square size parameters in meters
     double side = 1.6 * 0.305 * (1-scaling); // 0.305 m == 1 foot == 12 inches
     double diag = side*1.414;

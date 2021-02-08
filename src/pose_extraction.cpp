@@ -102,7 +102,7 @@ Pose_extraction::getWorldPose(const Mat &bgr_image, const Mat &depth_image, cons
     corner_points = findCornerPoints(bgr_image, blueness_image, bounding_box);
 
     if (!corner_points.empty() && this->has_depth_camera_info) {
-        double scaling_towards_center{0.2};
+        double scaling_towards_center{0.2};  // Tweak
         std::vector<cv::Point3f> inner_corner_points =
                 getInnerCornerPoints(
                         depth_image, corner_points,
@@ -195,9 +195,9 @@ std::vector<cv::Point2f> Pose_extraction::findCornerPoints(const Mat &cv_color_i
     cv::Mat im_tmp = blueness_image(outer_bounding_rect);
 
     // blueness_image must be the grayscale-image with blue-subtraction to do canny on
-    double canny_ratio = 2;                // Default: 2-3
-    int const canny_max_lowThreshold = 80; // Default: 80
-    int canny_kernel_size = 3;             // Default: 3
+    double canny_ratio = 2;                // Tweak Default: 2-3
+    int const canny_max_lowThreshold = 80; // Tweak Default: 80
+    int canny_kernel_size = 3;             // Tweak Default: 3
     // Canny edge image
     cv::Canny(im_tmp, im_tmp, canny_max_lowThreshold, canny_max_lowThreshold * canny_ratio);
 
@@ -208,7 +208,7 @@ std::vector<cv::Point2f> Pose_extraction::findCornerPoints(const Mat &cv_color_i
         HoughP
     };
     std::vector<cv::Vec2f> lines;
-    switch (LINE_METHOD::HoughP)
+    switch (LINE_METHOD::HoughP)  // Tweak
     { // Tweak
     case LINE_METHOD::Hough:
         cv::HoughLines(im_tmp, lines, 1, CV_PI / 180, 30);
@@ -227,7 +227,7 @@ std::vector<cv::Point2f> Pose_extraction::findCornerPoints(const Mat &cv_color_i
     std::vector<cv::Vec2f> lines_good;
 
     // Ignore the line if it is too far off the cartesian axes:
-    constexpr int cutoff = 4; ///< The biggest accepted deviation from the +-x, +-y axes allowed for a line: pi/(2*cutoff)
+    constexpr int cutoff = 4; ///< Tweak. The biggest accepted deviation from the +-x, +-y axes allowed for a line: pi/(2*cutoff)
     for (auto &line : lines)
     {
         double theta_m = std::fmod(line[1], CV_PI / 2);
@@ -299,7 +299,7 @@ std::vector<cv::Point2f> Pose_extraction::findCornerPoints(const Mat &cv_color_i
     sortPointsClockwise(hull_approx);
 
     cv::Point2f offset{static_cast<float>(outer_bounding_rect.x), static_cast<float>(outer_bounding_rect.y)};
-    double score = cornerPointScore(cv_color_image, hull_approx + offset);
+    double score = cornerPointScore(cv_color_image, hull_approx + offset);  // TODO(marius): Remove this validation step
 
     if (this->debug > 0)
     {
