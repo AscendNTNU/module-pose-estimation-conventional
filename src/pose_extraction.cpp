@@ -14,7 +14,7 @@ Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTran
         cv::namedWindow(DEBUG_WINDOW);
         cv::moveWindow(DEBUG_WINDOW, 10,540);
         cv::namedWindow(DEBUG_WINDOW2);
-        cv::moveWindow(DEBUG_WINDOW, 10,540);
+        cv::moveWindow(DEBUG_WINDOW2, 10,540);
     }
 }
 
@@ -97,6 +97,15 @@ Pose_extraction::getWorldPose(const cv::Mat &bgr_image, const cv::Mat &depth_ima
 
     /// Do your magic here!!!
     // TODO: Magic!
+
+    // I've written a small bbox displayer. It should give something relevant.
+    if (this->debug > 0) {
+        cv::Mat drawing_image;
+        bgr_image.copyTo(drawing_image);
+        cv::rectangle(drawing_image, bounding_box, cv::Scalar{128, 0, 256});
+
+        cv::imshow(DEBUG_WINDOW, bgr_image);
+    }
 
 
     bool all_good{false};
