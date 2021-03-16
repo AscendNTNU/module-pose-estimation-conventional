@@ -5,7 +5,7 @@
 #include "pose_extraction.h"
 
 Pose_extraction::Pose_extraction(ros::NodeHandle &nh, image_transport::ImageTransport &it, int img_buffer_size)
-            : nh_(nh), it_(it), BlueSquareScoreCalculator{}, image_ptr_buffer(img_buffer_size), debug{0}// TODO: Make buffer size parameter in launch file
+            : nh_(nh), it_(it), BlueSquareScoreCalculator{}, image_ptr_buffer(img_buffer_size), debug{0}
 {
     if (this->debug > 0) {
         // Initialize openCV window
