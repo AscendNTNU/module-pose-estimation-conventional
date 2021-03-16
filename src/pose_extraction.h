@@ -23,10 +23,7 @@
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 
-#include "blue_square_score.h"
-#include "utils/foreground_extraction.h"
 #include "utils/drawFunctions.h"
-#include "utils/depthToWorld.h"
 #include "utils/cvPointUtilities.h"
 #include "utils/LookupQueue/LookupQueue.h"
 #include "utils/lineUtils.h"
@@ -52,9 +49,6 @@ private:
     /// Image transport for subscription
     image_transport::ImageTransport it_;
 
-    /// Feature detector class. For use with doSiftSwitch
-    blueSquareScore BlueSquareScoreCalculator;
-
     tf2_ros::Buffer tf_buffer{ros::Duration{30}};  // TODO: Reduce buffer size when not debuging
     tf2_ros::TransformListener tf_listener{tf_buffer};   ///< Transform listener
 
@@ -68,11 +62,11 @@ private:
     /// Try to import the image given by the message. If it fails: return false
     static bool importImageDepth(const sensor_msgs::ImageConstPtr &msg, cv_bridge::CvImagePtr& ptr_out);
     /// Try to transform bbox detection to cv::Rect. If it fails: return false
-    static bool importBboxRect(const vision_msgs::Detection2D &bbox_msg, Rect &rect_out);
+    static bool importBboxRect(const vision_msgs::Detection2D &bbox_msg, cv::Rect &rect_out);
 
 
     // Core function finding pose
-    std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped> getWorldPose(const Mat &bgr_image, const cv::Mat& depth_image,
+    std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped> getWorldPose(const cv::Mat &bgr_image, const cv::Mat& depth_image,
                                                                             const cv::Rect& bounding_box);
 
     /**
@@ -86,19 +80,12 @@ private:
      * @param[in] outer_bounding_rect: The bounding rectangle from getBoundingRectangle in which the box lies.
      * @returns bool: Whether the score of "cornerPointScore" is high enough for the result to be valid
      */
-    std::vector<cv::Point2f> findCornerPoints(const Mat &cv_color_image, const cv::Mat &blueness_image,
-                                              const cv::Rect &inner_bounding_rect,
-                                              cv::Rect outer_bounding_rect);
-
-    std::vector<cv::Point2f> findCornerPoints(const Mat &cv_color_image, const cv::Mat &blueness_image,
-                                              const cv::Rect &inner_bounding_rect);
 
 
 
     typedef std::pair<cv_bridge::CvImagePtr, cv_bridge::CvImagePtr> image_ptr_tuple;
     LookupQueue<ros::Time, image_ptr_tuple> image_ptr_buffer;
 
-    double cornerPointScore(const Mat &image_in, const std::vector<cv::Point2f> &corners_in);
 
     /// Transform the PoseWithCovStamped to worldspace (with changing metadata)
     bool transformToWorld(geometry_msgs::PoseWithCovarianceStamped &pose_with_cov_stamped,
