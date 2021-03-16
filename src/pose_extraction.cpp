@@ -43,9 +43,14 @@ void Pose_extraction::bboxCb(const vision_msgs::Detection2D &bbox_msg) {
         return;
     };
 
+    if (debug % 2 == 1)
+        printf("Got a bbox with a corresponding depth image!\n");
+
     auto [cv_ptr_bgr, cv_ptr_depth] = images;
 
+    /// >>> All the processing happens in getWorldPose!
     auto [success, module_world_pose] = getWorldPose(cv_ptr_bgr->image, cv_ptr_depth->image, bbox);
+    /// <<<
 
     if (success) {
         this->pose_publisher.publish(module_world_pose);
@@ -90,6 +95,8 @@ Pose_extraction::getWorldPose(const Mat &bgr_image, const Mat &depth_image, cons
 
     auto ret = geometry_msgs::PoseWithCovarianceStamped{};
 
+
+    /*
     smoothed_depth_image = dilate_depth_image(depth_image, this->depth_dilation_kernel_size);
     depth_mask = generate_foreground_mask(smoothed_depth_image, this->depth_mean_offset_value, this->mask_dilation_kernel_size);
 
@@ -114,6 +121,7 @@ Pose_extraction::getWorldPose(const Mat &bgr_image, const Mat &depth_image, cons
             return std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped>(true, ret);
         }
     }
+    */
 
     return std::tuple<bool, geometry_msgs::PoseWithCovarianceStamped>(false, ret);
 }

@@ -7,6 +7,8 @@
 Bbox_publisher::Bbox_publisher(ros::NodeHandle &nh, image_transport::ImageTransport &it) : nh_(nh), it_(it), debug{0} {}
 
 void Bbox_publisher::imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg) {
+    if (debug % 2 == 1)
+        printf("bbox_publisher got an image pair.\n");
     /// Image pointers
     cv_bridge::CvImagePtr cv_ptr_bgr;
     cv_bridge::CvImagePtr cv_ptr_depth;
