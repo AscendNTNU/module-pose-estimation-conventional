@@ -25,9 +25,9 @@ Pose_extraction::~Pose_extraction()
     }
 }
 
-void Pose_extraction::bboxCb(const vision_msgs::Detection2D &bbox_msg) {
+void Pose_extraction::bboxCb(const vision_msgs::Detection2DArrayConstPtr bbox_msg) {
     if (debug % 2 == 1 && debug >= 3)
-        printf("Got bbox  with seq %d: %d.%d nsec:  ", bbox_msg.header.seq, bbox_msg.header.stamp.sec, bbox_msg.header.stamp.nsec);
+        printf("Got bbox  with seq %d: %d.%d nsec:  ", bbox_msg->header.seq, bbox_msg->header.stamp.sec, bbox_msg->header.stamp.nsec);
 
     cv::Rect bbox;
     if (!importBboxRect(bbox_msg, bbox)) {
@@ -37,7 +37,7 @@ void Pose_extraction::bboxCb(const vision_msgs::Detection2D &bbox_msg) {
 
     /// Get images saved by imageCb
     image_ptr_tuple images;
-    if (!image_ptr_buffer.lookupById(bbox_msg.header.stamp, images)) {
+    if (!image_ptr_buffer.lookupById(bbox_msg->header.stamp, images)) {
         if (debug % 2 == 1)
             printf("Warning: Did not find image in lookupByID. Consider increasing buffer size.\n");
         return;
@@ -154,9 +154,30 @@ bool Pose_extraction::importImageDepth(const sensor_msgs::ImageConstPtr &msg, cv
     }
 };
 
-bool Pose_extraction::importBboxRect(const vision_msgs::Detection2D &bbox_msg, cv::Rect& rect_out) {
-    double center_x{bbox_msg.bbox.center.x}, center_y{bbox_msg.bbox.center.y};
-    double w{bbox_msg.bbox.size_x}, h{bbox_msg.bbox.size_y};
+bool Pose_extraction::importBboxRect(const vision_msgs::Detection2DArrayConstPtr bbox_msg, cv::Rect& rect_out) {
+    // Set blue plate id
+    constexpr static int blue_plate_id{1};
+
+    // Loop through all detections to see if any are of the plate. Use the best
+    vision_msgs::Detection2D top_detection;
+    bool any_detection = false;
+
+    for (vision_msgs::Detection2D detection : bbox_msg->detections) {
+        if (detection.results.at(0).id == blue_plate_id) {
+            if (!any_detection || detection.results.at(0).score  > top_detection.results.at(0).score) {
+                any_detection = true;
+                top_detection = detection;
+            }
+        }
+    }
+
+    // Return if no detection is found
+    if (!any_detection)
+        return false;
+
+    // Set rect parameters from bbox message and return
+    double center_x{top_detection.bbox.center.x}, center_y{top_detection.bbox.center.y};
+    double w{top_detection.bbox.size_x}, h{top_detection.bbox.size_y};
 
     rect_out.x = std::round(center_x - w/2);
     rect_out.y = std::round(center_y - h/2);

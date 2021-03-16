@@ -13,7 +13,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
-#include <vision_msgs/Detection2D.h>
+#include <vision_msgs/Detection2DArray.h>
 
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/calib3d/calib3d.hpp>
@@ -62,7 +62,7 @@ private:
     /// Try to import the image given by the message. If it fails: return false
     static bool importImageDepth(const sensor_msgs::ImageConstPtr &msg, cv_bridge::CvImagePtr& ptr_out);
     /// Try to transform bbox detection to cv::Rect. If it fails: return false
-    static bool importBboxRect(const vision_msgs::Detection2D &bbox_msg, cv::Rect &rect_out);
+    static bool importBboxRect(const vision_msgs::Detection2DArrayConstPtr bbox_msg, cv::Rect &rect_out);
 
 
     // Core function finding pose
@@ -104,7 +104,7 @@ public:
     void imageCb(const sensor_msgs::ImageConstPtr &bgr_msg, const sensor_msgs::ImageConstPtr &depth_msg);
 
     // Callback on bounding box
-    void bboxCb(const vision_msgs::Detection2D& bbox_msg);
+    void bboxCb(const vision_msgs::Detection2DArrayConstPtr bbox_msg);
 
     // Callback to get depth camera info
     void depthCameraInfoCb(const boost::shared_ptr<sensor_msgs::CameraInfo const>& ptr_camera_info_message);
