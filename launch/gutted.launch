@@ -12,6 +12,6 @@
         <param name="debug" value="1" />
 	</node>
 
-    <node pkg="rosbag" type="play" name="player" args="-l --clock $(find module-pose-estimation-conventional)/bags/testflight_2021-01-13-14-36-25.bag"/>
+    <node pkg="rosbag" type="play" name="player" args="-l --clock $(find module-pose-estimation-conventional)/bags/testflight_2021-01-15-17=29-50.bag"/>
 
 </launch>
